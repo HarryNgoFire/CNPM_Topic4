@@ -1,0 +1,50 @@
+{
+  "name": "cnpm-topic4",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/api"
+  ],
+  "engines": {
+    "node": ">=22.12 <26"
+  },
+  "scripts": {
+    "build": "npm run build -w apps/api",
+    "dev:api": "npm run dev -w apps/api",
+    "start": "npm run start -w apps/api",
+    "test": "npm run test -w apps/api",
+    "test:coverage": "npm run test:coverage -w apps/api",
+    "test:integration": "npm run test:integration -w apps/api",
+    "typecheck": "npm run typecheck -w apps/api",
+    "lint": "eslint apps/api/src apps/api/test scripts",
+    "format": "prettier --write apps/api prisma scripts docs/m2 package.json",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx scripts/seed.ts",
+    "openapi": "ts-node --project apps/api/tsconfig.json scripts/export-openapi.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "dotenv": "^17.0.0",
+    "pg": "^8.16.0",
+    "@nestjs/swagger": "11.4.7"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0",
+    "tsx": "^4.20.0",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "@types/pg": "^8.15.0"
+  },
+  "overrides": {
+    "prisma": {
+      "mysql2": "^3.24.0"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.0"
+    },
+    "js-yaml": "4.3.2"
+  }
+}
