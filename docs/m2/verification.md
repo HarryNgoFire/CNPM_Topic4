@@ -59,9 +59,9 @@ Unit coverage dùng mock repository/network; các hành vi transaction, spatial 
 - Rollback toàn bộ booking/address/history khi ghi event thất bại; rollback transition khi outbox lỗi.
 - Đăng ký không cấp role đặc quyền và tạo profile cho Driver.
 
-## Những kiểm tra còn cần nhóm chạy
+## Xác nhận GitHub Actions và kiểm tra còn lại
 
-- Máy thực hiện chưa có Docker, nên chưa build/run image hoặc Compose. Cấu hình đã kiểm tra YAML; Docker build được đưa vào CI.
-- CI dùng PostgreSQL 16/PostGIS 3.5, khác patch/extension local đã kiểm tra. Chưa có kết quả GitHub Actions vì code chưa push.
+- Docker build đã pass trên GitHub Actions cho commit `35eb7e7`: https://github.com/HarryNgoFire/CNPM_Topic4/actions/runs/38116244964. Máy local chưa chạy toàn bộ Compose; cần smoke test Compose trên máy nhận bàn giao.
+- CI dùng PostgreSQL 16/PostGIS 3.5 đã pass toàn bộ migration, lint/typecheck/build, unit/HTTP, integration, OpenAPI và Docker build trên run nêu trên. Code đã push; draft PR: https://github.com/HarryNgoFire/CNPM_Topic4/pull/1.
 - Chưa chạy cùng frontend M1 hoặc schema/Auth implementation riêng của M3. Baseline và điểm tích hợp được ghi trong `integration.md`.
 - Audit toàn bộ dependency, gồm dev tooling, còn 34 advisory (5 moderate, 29 high), phần lớn qua Jest 29.7 và các thư viện test/pattern matching. Giữ phiên bản test nhóm chốt; M4 cần xử lý trong PR nâng cấp riêng. Không dùng `npm audit fix --force` để tự đổi major. Dependency runtime đã áp dụng override và audit riêng trả 0.

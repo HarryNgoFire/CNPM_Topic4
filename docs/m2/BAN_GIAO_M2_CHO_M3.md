@@ -2,6 +2,8 @@
 
 Ngày: 11/10/2026. Repo: https://github.com/HarryNgoFire/CNPM_Topic4. Nhánh: `feature/m2-backend-services`. Baseline main: `e35a1de`. Tài liệu này đi cùng code trên nhánh; đọc thêm `docs/m2/README.md`, `integration.md`, `verification.md` và `docs/api/openapi.json`.
 
+Draft PR: https://github.com/HarryNgoFire/CNPM_Topic4/pull/1. CI commit `35eb7e7` đã pass cả Docker build và PostGIS 3.5: https://github.com/HarryNgoFire/CNPM_Topic4/actions/runs/38116244964. Bản cập nhật tài liệu sau đó không đổi code nghiệp vụ.
+
 ## 1. M3 nhận những gì và cần chốt những gì
 
 M2 đã triển khai Pricing, Dispatch, Webhooks, Shipment và Tracking. Auth/RBAC, Prisma schema, migration và state machine là nền chạy thử, cần M3 tiếp nhận hoặc thay bằng bản chính thức có cùng contract.

@@ -150,7 +150,7 @@ npm run db:migrate
 npm run test:integration
 ```
 
-CI trong `.github/workflows/m2-backend.yml` tạo PostgreSQL 16/PostGIS 3.5, chạy migration, unit/HTTP tests, integration tests, export OpenAPI và Docker build. Workflow mới chỉ có thể được xác nhận trên GitHub sau khi nhánh được push.
+CI trong `.github/workflows/m2-backend.yml` tạo PostgreSQL 16/PostGIS 3.5, chạy migration, unit/HTTP tests, integration tests, export OpenAPI và Docker build. Workflow đã pass trên GitHub cho commit `35eb7e7`; liên kết kết quả nằm trong `verification.md`.
 
 OpenAPI được sinh vào `docs/api/openapi.json`. Chạy export sau khi đổi controller/DTO. File này có request, response, error schema và security contract.
 
