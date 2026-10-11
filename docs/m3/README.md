@@ -51,3 +51,32 @@ CI không bị ảnh hưởng vì mỗi lần chạy đều dùng database mới
 - Sửa `prisma/schema.prisma` cùng commit với migration tương ứng.
 - Phần Prisma không biểu diễn được (geography, partial index, CHECK, trigger) viết tay trong `migration.sql`.
 - Chạy `npm run test:integration` trên database có tên kết thúc `_test` trước khi mở PR.
+
+## Sơ đồ
+
+| Sơ đồ                            | Nguồn chỉnh sửa (draw.io)                                  | Ảnh dùng cho báo cáo                                    |
+| -------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| ERD 12 bảng, ký pháp crow's-foot | `docs/architecture/diagrams/erd.drawio`                    | `docs/architecture/diagrams/erd.png`                    |
+| State machine vòng đời Shipment  | `docs/architecture/diagrams/shipment-state-machine.drawio` | `docs/architecture/diagrams/shipment-state-machine.png` |
+
+Mở file `.drawio` bằng app.diagrams.net hoặc draw.io Desktop. Khi schema hoặc luồng transition thay đổi, sửa file `.drawio` và xuất lại PNG trong cùng commit.
+
+### Điểm khác so với mục 6.2 của tài liệu triển khai
+
+Tài liệu triển khai mô tả 9 bảng ở mức khái niệm. Schema thực tế có 12 bảng vì các yêu cầu khác trong chính tài liệu đó cần thêm chỗ lưu:
+
+- `RefreshSession`: mục 12.1 yêu cầu lưu hash của refresh token để thu hồi được.
+- `WebhookSubscription` và `WebhookDelivery`: mục 11.4 có API đăng ký URL nhận webhook; mỗi subscription cần trạng thái gửi và số lần thử riêng.
+- `PricingRule`: một dòng là một bộ tham số đầy đủ có `version`, tránh ghép tham số của nhiều phiên bản khi tính phí.
+- `ShipmentStatusHistory.fromStatus` cho phép NULL: mốc RECEIVED đầu tiên không có trạng thái trước đó.
+- `DriverAssignment.expiresAt` và trạng thái `COMPLETED`: phục vụ BR-DISPATCH-02 và BR-DISPATCH-03.
+- `Shipment.feeBreakdown`: lưu rule, version và khoảng cách đã dùng để tính `fee`.
+
+## Bàn giao cho từng thành viên
+
+| Người nhận | Cần đọc                       | Cần làm                                                                                                        |
+| ---------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| M2         | Mục "Chuỗi migration"         | Tạo lại database local. Từ nay đổi schema bằng migration mới và gửi M3 review; không đưa lại file baseline cũ. |
+| M1         | `docs/api/openapi.json`       | Không phải sửa gì: hợp đồng API giữ nguyên.                                                                    |
+| M4         | Mục "Cách đã kiểm chứng"      | Workflow CI không cần sửa. Tạo lại `topic4_test` trên máy trước khi chạy integration test.                     |
+| Cả nhóm    | `docs/architecture/diagrams/` | Dùng `erd.png` và `shipment-state-machine.png` cho phần Architecture & UML của báo cáo.                        |
