@@ -65,3 +65,7 @@ Unit coverage dùng mock repository/network; các hành vi transaction, spatial 
 - CI dùng PostgreSQL 16/PostGIS 3.5 đã pass toàn bộ migration, lint/typecheck/build, unit/HTTP, integration, OpenAPI và Docker build trên run nêu trên. Code đã push; draft PR: https://github.com/HarryNgoFire/CNPM_Topic4/pull/1.
 - Chưa chạy cùng frontend M1 hoặc schema/Auth implementation riêng của M3. Baseline và điểm tích hợp được ghi trong `integration.md`.
 - Audit toàn bộ dependency, gồm dev tooling, còn 34 advisory (5 moderate, 29 high), phần lớn qua Jest 29.7 và các thư viện test/pattern matching. Giữ phiên bản test nhóm chốt; M4 cần xử lý trong PR nâng cấp riêng. Không dùng `npm audit fix --force` để tự đổi major. Dependency runtime đã áp dụng override và audit riêng trả 0.
+
+## Kiểm tra đồng bộ M3 — 12/10/2026
+
+Tiếp nhận M3 commit `a661cd5`. SQL của baseline và 9 migration có cùng 55 statement (đối chiếu bỏ comment/thứ tự); schema, API và Auth không đổi. Lint/typecheck/build và 105 unit/HTTP đã pass lại. Bổ sung integration test migration-history guard; tổng integration dự kiến 23, kết quả thực tế xem CI của commit cập nhật trên PR #1. Chi tiết chuyển DB: `M3_INTEGRATION.md`.

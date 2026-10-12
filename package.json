@@ -19,9 +19,10 @@
     "lint": "eslint apps/api/src apps/api/test scripts",
     "format": "prettier --write apps/api prisma scripts docs/m2 package.json",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "npm run db:check-history && prisma migrate deploy",
     "db:seed": "tsx scripts/seed.ts",
-    "openapi": "ts-node --project apps/api/tsconfig.json scripts/export-openapi.ts"
+    "openapi": "ts-node --project apps/api/tsconfig.json scripts/export-openapi.ts",
+    "db:check-history": "node scripts/check-migration-history.mjs"
   },
   "dependencies": {
     "@prisma/client": "7.10.0",

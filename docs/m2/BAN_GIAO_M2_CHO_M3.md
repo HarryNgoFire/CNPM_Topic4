@@ -1,5 +1,6 @@
 # Bàn giao M2 cho M3 — CNPM Topic 4
 
+> Cập nhật 12/10/2026: đã đồng bộ 9 migration của M3; xem [M3_INTEGRATION.md](M3_INTEGRATION.md) trước khi chạy trên DB từng dùng baseline M2. Schema/API/Auth không đổi.
 Ngày: 11/10/2026. Repo: https://github.com/HarryNgoFire/CNPM_Topic4. Nhánh: `feature/m2-backend-services`. Baseline main: `e35a1de`. Tài liệu này đi cùng code trên nhánh; đọc thêm `docs/m2/README.md`, `integration.md`, `verification.md` và `docs/api/openapi.json`.
 
 Draft PR: https://github.com/HarryNgoFire/CNPM_Topic4/pull/1. CI commit `35eb7e7` đã pass cả Docker build và PostGIS 3.5: https://github.com/HarryNgoFire/CNPM_Topic4/actions/runs/38116244964. Bản cập nhật tài liệu sau đó không đổi code nghiệp vụ.

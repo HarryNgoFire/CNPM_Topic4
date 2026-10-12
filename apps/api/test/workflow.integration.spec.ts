@@ -5,7 +5,9 @@ import { getStorageToken } from "@nestjs/throttler";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import request from "supertest";
 import { createServer, Server } from "node:http";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { hash } from "bcryptjs";
 import { AppModule } from "../src/app.module";
 import { configure } from "../src/bootstrap";
@@ -89,6 +91,25 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       await new Promise<void>((resolve, reject) =>
         receiver.close((err) => (err ? reject(err) : resolve())),
       );
+  });
+  it("blocks the retired M2 baseline without changing business data", async () => {
+    const script = resolve(__dirname, "../../../scripts/check-migration-history.mjs");
+    const check = () => spawnSync(process.execPath, [script], { env: process.env, encoding: "utf8" });
+    expect(check().status).toBe(0);
+    const userCount = await db.user.count();
+    const id = randomUUID();
+    await db.$executeRaw`INSERT INTO public._prisma_migrations
+      (id, checksum, migration_name, finished_at, applied_steps_count)
+      VALUES (${id}, 'integration-test-only', '202610110001_m2_baseline', NOW(), 1)`;
+    try {
+      const result = check();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("M2_LEGACY_BASELINE");
+      expect(await db.user.count()).toBe(userCount);
+    } finally {
+      await db.$executeRaw`DELETE FROM public._prisma_migrations WHERE id = ${id}`;
+    }
+    expect(check().status).toBe(0);
   });
   beforeEach(async () => {
     (app.get(getStorageToken()) as any).onApplicationShutdown();

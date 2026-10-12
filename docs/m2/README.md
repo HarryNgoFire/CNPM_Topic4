@@ -1,5 +1,6 @@
 # Hướng dẫn chạy và bàn giao phần M2
 
+> Cập nhật 12/10/2026: đã đồng bộ 9 migration của M3; xem [M3_INTEGRATION.md](M3_INTEGRATION.md) trước khi chạy trên DB từng dùng baseline M2. Schema/API/Auth không đổi.
 Bản code này triển khai Pricing, Dispatch và Webhook trên NestJS. Có thêm Shipment, public Tracking và lớp Auth/state machine nền để chạy toàn bộ luồng giao hàng độc lập. Schema, Auth/RBAC và state machine cần M3 rà soát khi tích hợp; test và CI cần M4 tiếp nhận. Frontend thuộc M1 và chưa được tạo trong bản này.
 
 ## Chạy bằng Docker Compose
