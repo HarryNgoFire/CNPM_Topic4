@@ -1,5 +1,7 @@
 # Last-Mile Express Logistics & Parcel Tracking System
 
+**Cập nhật M2:** Backend đã được bổ sung trong `apps/api/`. Xem [hướng dẫn chạy M2](docs/m2/README.md), [ghi chú tích hợp](docs/m2/integration.md) và [kết quả kiểm tra](docs/m2/verification.md). Các phần frontend/chatbot trong blueprint bên dưới chưa được triển khai.
+
 > **Project repository blueprint** — hệ thống quản lý giao hàng chặng cuối, phân công tài xế và theo dõi kiện hàng. Repository này định nghĩa cấu trúc dự án, quy ước phát triển, tài liệu kỹ thuật và các điểm cần hoàn thiện; các thư mục/file được đánh dấu `TODO`, `Proposed` hoặc `placeholder` chưa phải chức năng đã triển khai.
 
 ---

@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  SENDER
+  DRIVER
+  DISPATCHER
+  ADMIN
+  SYSTEM
+}
+enum ShipmentStatus {
+  RECEIVED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+}
+enum DriverStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+}
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  COMPLETED
+}
+enum ServiceType {
+  STANDARD
+  EXPRESS
+}
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  name String
+  passwordHash String
+  role Role
+  active Boolean @default(true)
+  driver Driver?
+  shipments Shipment[]
+  sessions RefreshSession[]
+  history ShipmentStatusHistory[]
+}
+model RefreshSession {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  user User @relation(fields:[userId], references:[id])
+}
+model Driver {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @unique @db.Uuid
+  vehicleType String @default("MOTORBIKE")
+  status DriverStatus @default(OFFLINE)
+  currentLocation Unsupported("geography(Point,4326)")?
+  lastLocationAt DateTime?
+  user User @relation(fields:[userId],references:[id])
+  assignments DriverAssignment[]
+}
+model Address {
+  id String @id @default(uuid()) @db.Uuid
+  line String
+  ward String
+  district String
+  city String
+  location Unsupported("geography(Point,4326)")
+  pickups Shipment[] @relation("Pickup")
+  dropoffs Shipment[] @relation("Dropoff")
+}
+model Shipment {
+  id String @id @default(uuid()) @db.Uuid
+  trackingCode String @unique @db.VarChar(16)
+  senderId String @db.Uuid
+  pickupAddressId String @db.Uuid
+  dropoffAddressId String @db.Uuid
+  status ShipmentStatus @default(RECEIVED)
+  serviceType ServiceType
+  fee Decimal @db.Decimal(12,2)
+  feeBreakdown Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sender User @relation(fields:[senderId],references:[id])
+  pickup Address @relation("Pickup",fields:[pickupAddressId],references:[id])
+  dropoff Address @relation("Dropoff",fields:[dropoffAddressId],references:[id])
+  parcel Parcel?
+  assignments DriverAssignment[]
+  history ShipmentStatusHistory[]
+  events WebhookEvent[]
+  @@index([senderId,createdAt])
+  @@index([status])
+}
+model Parcel {
+  id String @id @default(uuid()) @db.Uuid
+  shipmentId String @unique @db.Uuid
+  weightKg Decimal @db.Decimal(6,2)
+  lengthCm Decimal @db.Decimal(6,2)
+  widthCm Decimal @db.Decimal(6,2)
+  heightCm Decimal @db.Decimal(6,2)
+  shipment Shipment @relation(fields:[shipmentId],references:[id])
+}
+model DriverAssignment {
+  id String @id @default(uuid()) @db.Uuid
+  shipmentId String @db.Uuid
+  driverId String @db.Uuid
+  status AssignmentStatus @default(PENDING)
+  assignedAt DateTime @default(now())
+  expiresAt DateTime
+  respondedAt DateTime?
+  shipment Shipment @relation(fields:[shipmentId],references:[id])
+  driver Driver @relation(fields:[driverId],references:[id])
+  @@index([status,expiresAt])
+}
+model ShipmentStatusHistory {
+  id String @id @default(uuid()) @db.Uuid
+  shipmentId String @db.Uuid
+  fromStatus ShipmentStatus?
+  toStatus ShipmentStatus
+  changedBy String @db.Uuid
+  occurredAt DateTime @default(now())
+  shipment Shipment @relation(fields:[shipmentId],references:[id])
+  actor User @relation(fields:[changedBy],references:[id])
+  @@index([shipmentId,occurredAt])
+}
+model PricingRule {
+  id String @id @default(uuid()) @db.Uuid
+  version Int @unique
+  baseFee Decimal @db.Decimal(12,2)
+  ratePerKm Decimal @db.Decimal(12,2)
+  freeWeightThreshold Decimal @db.Decimal(6,2)
+  ratePerExtraKg Decimal @db.Decimal(12,2)
+  standardMultiplier Decimal @db.Decimal(6,2)
+  expressMultiplier Decimal @db.Decimal(6,2)
+  effectiveFrom DateTime @default(now())
+  active Boolean @default(true)
+}
+model WebhookSubscription {
+  id String @id @default(uuid()) @db.Uuid
+  url String
+  secret String
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  deliveries WebhookDelivery[]
+}
+model WebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+  shipmentId String @db.Uuid
+  eventType String
+  payload Json
+  createdAt DateTime @default(now())
+  shipment Shipment @relation(fields:[shipmentId],references:[id])
+  deliveries WebhookDelivery[]
+}
+model WebhookDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  subscriptionId String @db.Uuid
+  status DeliveryStatus @default(PENDING)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lockedUntil DateTime?
+  leaseToken String? @db.Uuid
+  lastError String?
+  deliveredAt DateTime?
+  event WebhookEvent @relation(fields:[eventId],references:[id])
+  subscription WebhookSubscription @relation(fields:[subscriptionId],references:[id])
+  @@unique([eventId,subscriptionId])
+  @@index([status,nextAttemptAt])
+}

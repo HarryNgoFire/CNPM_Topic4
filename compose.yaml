@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_USER: topic4
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: topic4
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["db_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U topic4 -d topic4"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: build
+    environment:
+      DATABASE_URL: postgresql://topic4:${POSTGRES_PASSWORD}@db:5432/topic4
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://topic4:${POSTGRES_PASSWORD}@db:5432/topic4
+    ports: ["3001:3001"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  receiver:
+    image: node:22.22.3-bookworm-slim
+    working_dir: /app
+    volumes: ["./scripts/webhook-receiver.mjs:/app/receiver.mjs:ro"]
+    command: ["node", "receiver.mjs"]
+    environment:
+      WEBHOOK_RECEIVER_SECRET: ${WEBHOOK_RECEIVER_SECRET:?Set WEBHOOK_RECEIVER_SECRET}
+    ports: ["127.0.0.1:4000:4000"]
+volumes:
+  db_data:
