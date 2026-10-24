@@ -1,0 +1,45 @@
+name: M2 backend checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: topic4
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: topic4_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U topic4 -d topic4_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://topic4:testpassword@localhost:5432/topic4_test
+      JWT_SECRET: ci-test-secret-not-used-outside-the-test-job
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:coverage
+      - run: npm run test:integration
+      - run: npm run openapi
+      - run: git diff --exit-code -- docs/api/openapi.json
+      - run: docker build -f Dockerfile.api -t topic4-api .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: apps/api/coverage
