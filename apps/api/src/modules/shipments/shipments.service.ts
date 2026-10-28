@@ -11,6 +11,7 @@ import { Actor } from "../../common/security";
 import { AddressDto, BookingDto, ShipmentPageDto } from "../../common/dto";
 import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
 export function canTransition(current: ShipmentStatus, next: ShipmentStatus) {
   const states: ShipmentStatus[] = [
     "RECEIVED",
@@ -34,10 +35,12 @@ export class ShipmentsService {
     return id;
   }
   async create(input: BookingDto, actor: Actor) {
+    // Route lookup is an external HTTP call, so compute the quote before opening
+    // the database transaction to avoid holding locks during network latency.
+    const breakdown = await this.pricing.quote(input);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.db.$transaction(async (tx) => {
-          const breakdown = await this.pricing.quote(input, tx);
           const pickupAddressId = await this.address(tx, input.pickupAddress);
           const dropoffAddressId = await this.address(tx, input.dropoffAddress);
           const shipment = await tx.shipment.create({
@@ -112,7 +115,39 @@ export class ShipmentsService {
       });
       if (!assignment) throw new ForbiddenException();
     }
-    return shipment;
+    const locations = await this.db.$queryRaw<
+      Array<{
+        pickupLat: number;
+        pickupLng: number;
+        dropoffLat: number;
+        dropoffLng: number;
+      }>
+    >`
+      SELECT
+        ST_Y(p.location::geometry)::double precision AS "pickupLat",
+        ST_X(p.location::geometry)::double precision AS "pickupLng",
+        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
+        ST_X(d.location::geometry)::double precision AS "dropoffLng"
+      FROM "Address" p
+      JOIN "Address" d ON d.id = ${shipment.dropoffAddressId}::uuid
+      WHERE p.id = ${shipment.pickupAddressId}::uuid
+    `;
+    const coordinates = locations[0];
+    return {
+      ...shipment,
+      navigationUrls: coordinates
+        ? {
+            pickup: buildGoogleMapsDirectionsUrl({
+              lat: coordinates.pickupLat,
+              lng: coordinates.pickupLng,
+            }),
+            dropoff: buildGoogleMapsDirectionsUrl({
+              lat: coordinates.dropoffLat,
+              lng: coordinates.dropoffLng,
+            }),
+          }
+        : null,
+    };
   }
   async tracking(code: string) {
     const shipment = await this.db.shipment.findUnique({

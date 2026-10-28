@@ -32,12 +32,13 @@ async function main() {
     ] as const) {
       const user = await db.user.upsert({
         where: { email },
-        update: {},
+        update: { emailVerified: true, active: true },
         create: {
           email,
           name: email.split("@")[0],
           role,
           passwordHash: await hash(password, 12),
+          emailVerified: true,
         },
       });
       if (role === "DRIVER") {

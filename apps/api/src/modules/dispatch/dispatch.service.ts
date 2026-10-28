@@ -10,6 +10,7 @@ import { DriverStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
 import { PointDto } from "../../common/dto";
+import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
 function setting(name: string, fallback: number) {
   const v = Number(process.env[name] ?? fallback);
   if (!Number.isFinite(v) || v <= 0) throw new Error(`Invalid ${name}`);
@@ -151,12 +152,56 @@ export class DispatchService {
   }
   async tasks(actor: Actor) {
     const driver = await this.driverFor(actor);
-    return this.db.driverAssignment.findMany({
+    const tasks = await this.db.driverAssignment.findMany({
       where: { driverId: driver.id, status: { in: ["PENDING", "ACCEPTED"] } },
       include: {
         shipment: { include: { pickup: true, dropoff: true, parcel: true } },
       },
       orderBy: { assignedAt: "asc" },
+    });
+    if (!tasks.length) return tasks;
+
+    // Prisma cannot materialize the PostGIS geography column, so fetch only the
+    // coordinates needed to produce stable Google Maps navigation links.
+    const ids = tasks.map((task) => task.shipmentId);
+    const points = await this.db.$queryRaw<
+      Array<{
+        shipmentId: string;
+        pickupLat: number;
+        pickupLng: number;
+        dropoffLat: number;
+        dropoffLng: number;
+      }>
+    >`
+      SELECT
+        s.id::text AS "shipmentId",
+        ST_Y(p.location::geometry)::double precision AS "pickupLat",
+        ST_X(p.location::geometry)::double precision AS "pickupLng",
+        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
+        ST_X(d.location::geometry)::double precision AS "dropoffLng"
+      FROM "Shipment" s
+      JOIN "Address" p ON p.id = s."pickupAddressId"
+      JOIN "Address" d ON d.id = s."dropoffAddressId"
+      WHERE s.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+    `;
+    const byShipment = new Map(points.map((point) => [point.shipmentId, point]));
+    return tasks.map((task) => {
+      const point = byShipment.get(task.shipmentId);
+      return {
+        ...task,
+        navigationUrls: point
+          ? {
+              pickup: buildGoogleMapsDirectionsUrl({
+                lat: point.pickupLat,
+                lng: point.pickupLng,
+              }),
+              dropoff: buildGoogleMapsDirectionsUrl({
+                lat: point.dropoffLat,
+                lng: point.dropoffLng,
+              }),
+            }
+          : null,
+      };
     });
   }
   async location(actor: Actor, input: PointDto) {

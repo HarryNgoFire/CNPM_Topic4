@@ -4,16 +4,17 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { Prisma, PricingRule, ServiceType } from "@prisma/client";
+import { PricingRule, ServiceType } from "@prisma/client";
 import Decimal from "decimal.js";
 import { PrismaService } from "../../database/prisma.service";
 import { BookingDto, PricingRuleDto } from "../../common/dto";
-export type DbTx = Prisma.TransactionClient;
+import { OsrmRoutingService } from "./osrm-routing.service";
 export function calculateFee(
   rule: PricingRule,
   distanceKm: number,
   weightKg: number,
   serviceType: ServiceType,
+  distanceSource = "OSRM_DRIVING",
 ) {
   if (
     !Number.isFinite(distanceKm) ||
@@ -44,6 +45,7 @@ export function calculateFee(
     ruleId: rule.id,
     ruleVersion: rule.version,
     distanceKm,
+    distanceSource,
     baseFee: Number(rule.baseFee),
     distanceFee: distanceFee.toNumber(),
     weightSurcharge: weightFee.toNumber(),
@@ -53,22 +55,30 @@ export function calculateFee(
 }
 @Injectable()
 export class PricingService {
-  constructor(private readonly db: PrismaService) {}
-  async quote(input: BookingDto, tx: DbTx = this.db) {
-    const rule = await tx.pricingRule.findFirst({
+  constructor(
+    private readonly db: PrismaService,
+    private readonly routing: OsrmRoutingService,
+  ) {}
+  async quote(input: BookingDto) {
+    const rule = await this.db.pricingRule.findFirst({
       where: { active: true, effectiveFrom: { lte: new Date() } },
       orderBy: { version: "desc" },
     });
     if (!rule)
       throw new ServiceUnavailableException("No effective pricing rule");
-    const rows = await tx.$queryRaw<{ distanceKm: number }[]>`
-   SELECT ST_Distance(ST_SetSRID(ST_MakePoint(${input.pickupAddress.lng},${input.pickupAddress.lat}),4326)::geography,
-   ST_SetSRID(ST_MakePoint(${input.dropoffAddress.lng},${input.dropoffAddress.lat}),4326)::geography)/1000.0 AS "distanceKm"`;
+    // Call the road-routing service before opening any shipment transaction.
+    // If OSRM is unavailable, fail the quote rather than silently charging by
+    // straight-line distance.
+    const route = await this.routing.getDistance(
+      input.pickupAddress,
+      input.dropoffAddress,
+    );
     return calculateFee(
       rule,
-      rows[0].distanceKm,
+      route.distanceKm,
       input.parcel.weightKg,
       input.serviceType,
+      route.distanceSource,
     );
   }
   listRules() {

@@ -1,3 +1,5 @@
+> **Lưu ý về phiên bản:** Đây là biên bản kiểm thử lịch sử ngày 11/10/2026 cho baseline M2/M3 trước khi bổ sung frontend MoveFlow, xác minh email OTP và API quản lý tài khoản trong bản bàn giao hiện tại. Các con số bên dưới không có nghĩa là build/test của bản hiện tại đã chạy lại thành công. Xem [review hiện tại](../DEVELOPER_REVIEW_AND_REMEDIATION.md) để biết các kiểm tra đã thực hiện và phần còn phải xác nhận.
+
 # Kết quả kiểm tra phần M2
 
 Ngày kiểm tra: 11/10/2026. Bản code dựa trên nhánh main của repo nhóm tại commit `e35a1de`, làm việc trên nhánh local `feature/m2-backend-services`.

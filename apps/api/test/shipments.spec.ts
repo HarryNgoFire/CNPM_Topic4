@@ -31,6 +31,7 @@ describe("Shipment state machine and ownership", () => {
   };
   beforeEach(() => {
     jest.clearAllMocks();
+    db.$queryRaw.mockResolvedValue([]);
     db.shipment.findUnique.mockResolvedValue(shipment);
     db.shipment.update.mockImplementation(async ({ data }: any) => ({
       ...shipment,
@@ -124,7 +125,32 @@ describe("Shipment state machine and ownership", () => {
   it("returns owned shipment", async () =>
     expect(
       await service.get("ship", { sub: "sender", role: "SENDER" }),
-    ).toEqual(shipment));
+    ).toMatchObject({ ...shipment, navigationUrls: null }));
+  it("adds pickup and dropoff Google Maps navigation URLs", async () => {
+    db.shipment.findUnique.mockResolvedValue({
+      ...shipment,
+      pickupAddressId: "pickup-id",
+      dropoffAddressId: "dropoff-id",
+    });
+    db.$queryRaw.mockResolvedValue([
+      {
+        pickupLat: 10.754,
+        pickupLng: 106.663,
+        dropoffLat: 10.772,
+        dropoffLng: 106.698,
+      },
+    ]);
+
+    const result = await service.get("ship", {
+      sub: "sender",
+      role: "SENDER",
+    });
+    const pickupUrl = new URL(result.navigationUrls!.pickup);
+    const dropoffUrl = new URL(result.navigationUrls!.dropoff);
+    expect(pickupUrl.searchParams.get("destination")).toBe("10.754,106.663");
+    expect(dropoffUrl.searchParams.get("destination")).toBe("10.772,106.698");
+    expect(pickupUrl.searchParams.get("travelmode")).toBe("two-wheeler");
+  });
   it("scopes shipment list by sender", async () => {
     await service.list(
       { page: 2, limit: 10, status: "RECEIVED" },

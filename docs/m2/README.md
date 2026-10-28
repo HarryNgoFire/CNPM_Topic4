@@ -1,7 +1,11 @@
+> **Tài liệu M2 lịch sử:** Nội dung dưới đây mô tả phần backend trước khi thêm giao diện MoveFlow và email OTP. Để chạy bản mới nhất, dùng [USER_GUIDE.md](../USER_GUIDE.md); các kết quả test cũ không thay thế kiểm tra lại bản mới.
+
 # Hướng dẫn chạy và bàn giao phần M2
 
 > Cập nhật 12/10/2026: đã đồng bộ 9 migration của M3; xem [M3_INTEGRATION.md](M3_INTEGRATION.md) trước khi chạy trên DB từng dùng baseline M2. Schema/API/Auth không đổi.
 Bản code này triển khai Pricing, Dispatch và Webhook trên NestJS. Có thêm Shipment, public Tracking và lớp Auth/state machine nền để chạy toàn bộ luồng giao hàng độc lập. Schema, Auth/RBAC và state machine cần M3 rà soát khi tích hợp; test và CI cần M4 tiếp nhận. Frontend thuộc M1 và chưa được tạo trong bản này.
+
+Tích hợp OSRM để tính khoảng cách đường bộ không cần API key và Google Maps URLs để tài xế mở điều hướng: xem [google-maps-integration.md](google-maps-integration.md).
 
 ## Chạy bằng Docker Compose
 
@@ -12,6 +16,7 @@ Tại thư mục gốc repo, sao chép `.env.example` thành `.env`. Đặt các
 - `JWT_SECRET`: chuỗi ngẫu nhiên tối thiểu 32 ký tự, thay hoàn toàn giá trị mẫu.
 - `DEMO_PASSWORD`: mật khẩu tài khoản demo, tối thiểu 10 ký tự, tối đa 72 byte UTF-8.
 - `WEBHOOK_RECEIVER_SECRET`: chuỗi ngẫu nhiên tối thiểu 32 ký tự.
+- `OSRM_BASE_URL`: mặc định dùng máy chủ demo công khai `https://router.project-osrm.org`; không cần API key. Xem các giới hạn và lựa chọn tự host trong [google-maps-integration.md](google-maps-integration.md).
 
 ```bash
 cp .env.example .env
@@ -91,7 +96,7 @@ Khi cả API và receiver chạy trên máy, đặt `WEBHOOK_ALLOWED_ORIGINS=htt
 }
 ```
 
-Các tọa độ minh họa trên không cách nhau 8,4 km. API dùng khoảng cách thật của PostGIS, vì vậy không mặc định phí booking này là 75.300 VND. 75.300 VND là kết quả unit test với đầu vào khoảng cách đúng 8,4 km.
+Các tọa độ minh họa trên không cách nhau 8,4 km. Quote gọi OSRM để lấy khoảng cách tuyến đường profile `driving`; nếu máy chủ định tuyến lỗi, quote trả lỗi thay vì tính phí bằng đường chim bay. 75.300 VND là kết quả unit test với đầu vào khoảng cách 8,4 km, không phải báo giá cố định cho ví dụ này.
 
 ## Quyết định nghiệp vụ trong code
 
@@ -103,7 +108,7 @@ fee = (baseFee + distanceKm × ratePerKm
       × serviceMultiplier
 ```
 
-- Khoảng cách lấy từ `ST_Distance(geography, geography)` theo mét, chia 1.000 thành km. Đây là khoảng cách địa lý, chưa phải quãng đường theo mạng đường bộ hoặc route optimization.
+- `distanceKm` lấy từ `routes[0].distance / 1000` của OSRM; `distanceSource=OSRM_DRIVING`. Đây là profile driving, không phải profile xe máy riêng. Khi OSRM lỗi, hệ thống không âm thầm dùng khoảng cách chim bay. Nút chỉ đường vẫn mở Google Maps với `travelmode=two-wheeler`. Xem [hướng dẫn định tuyến](google-maps-integration.md).
 - Dùng decimal arithmetic; làm tròn half-up tới 1 VND, không làm tròn tới hàng nghìn.
 - Fee và fee breakdown được lưu lúc tạo đơn. DB trigger chặn sửa snapshot.
 - Rule là một bộ tham số có version; Admin sửa rule mới nhất để tạo version kế tiếp. Rule cũ và shipment cũ được giữ nguyên.

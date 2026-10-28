@@ -25,6 +25,15 @@ export function addResponseContracts(doc: OpenAPIObject) {
       ruleId: uuid,
       ruleVersion: { type: "integer" },
       distanceKm: money,
+      distanceSource: {
+        type: "string",
+        enum: [
+          "OSRM_DRIVING",
+          "GOOGLE_ROUTES_TWO_WHEELER",
+          "GOOGLE_ROUTES_DRIVE",
+          "POSTGIS_GEODESIC_FALLBACK",
+        ],
+      },
       baseFee: money,
       distanceFee: money,
       weightSurcharge: money,
@@ -167,6 +176,10 @@ export function addResponseContracts(doc: OpenAPIObject) {
     changedBy: uuid,
     occurredAt: date,
   });
+  schemas.NavigationUrls = object({
+    pickup: { type: "string", format: "uri" },
+    dropoff: { type: "string", format: "uri" },
+  });
   schemas.ShipmentDetailResponse = {
     allOf: [
       ref("ShipmentResponse"),
@@ -175,6 +188,9 @@ export function addResponseContracts(doc: OpenAPIObject) {
         pickup: ref("AddressResponse"),
         dropoff: ref("AddressResponse"),
         history: array("HistoryResponse"),
+        navigationUrls: {
+          oneOf: [ref("NavigationUrls"), { type: "null" }],
+        },
       }),
     ],
   };
@@ -191,6 +207,9 @@ export function addResponseContracts(doc: OpenAPIObject) {
               dropoff: ref("AddressResponse"),
             }),
           ],
+        },
+        navigationUrls: {
+          oneOf: [ref("NavigationUrls"), { type: "null" }],
         },
       }),
     ],

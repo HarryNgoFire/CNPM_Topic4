@@ -129,7 +129,7 @@ Base `/api/v1`; Bearer access token trong `Authorization`. Role chữ hoa. Sende
 
 | Endpoint | Role |
 |---|---|
-| POST auth/register, login, refresh, logout | Public; đăng ký chỉ SENDER/DRIVER |
+| POST auth/register, login, refresh, logout | Public; đăng ký công khai chỉ SENDER; DRIVER/ADMIN/DISPATCHER phải được cấp riêng |
 | POST pricing/quote; POST shipments | SENDER/ADMIN |
 | GET shipments | SENDER/ADMIN/DISPATCHER |
 | GET shipments/:id | SENDER/ADMIN/DISPATCHER/DRIVER với kiểm ownership |

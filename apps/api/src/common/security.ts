@@ -49,7 +49,7 @@ export class SecurityGuard implements CanActivate {
     // Use current DB role, never a stale JWT role. SYSTEM is reserved for internal jobs.
     if (!isUUID(claims.sub)) throw new UnauthorizedException();
     const user = await this.db.user.findUnique({ where: { id: claims.sub } });
-    if (!user?.active || user.role === Role.SYSTEM)
+    if (!user?.active || !user.emailVerified || user.role === Role.SYSTEM)
       throw new UnauthorizedException();
     req.user = { sub: user.id, role: user.role };
     const roles = this.reflector.getAllAndOverride<Role[]>("roles", [

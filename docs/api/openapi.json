@@ -2645,6 +2645,15 @@
           "fee": {
             "type": "number",
             "minimum": 0
+          },
+          "distanceSource": {
+            "type": "string",
+            "enum": [
+              "OSRM_DRIVING",
+              "GOOGLE_ROUTES_TWO_WHEELER",
+              "GOOGLE_ROUTES_DRIVE",
+              "POSTGIS_GEODESIC_FALLBACK"
+            ]
           }
         },
         "required": [
@@ -2652,6 +2661,7 @@
           "ruleId",
           "ruleVersion",
           "distanceKm",
+          "distanceSource",
           "baseFee",
           "distanceFee",
           "weightSurcharge",
@@ -3362,13 +3372,24 @@
                 "items": {
                   "$ref": "#/components/schemas/HistoryResponse"
                 }
+              },
+              "navigationUrls": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/NavigationUrls"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "parcel",
               "pickup",
               "dropoff",
-              "history"
+              "history",
+              "navigationUrls"
             ]
           }
         ]
@@ -3406,10 +3427,21 @@
                     ]
                   }
                 ]
+              },
+              "navigationUrls": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/NavigationUrls"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
-              "shipment"
+              "shipment",
+              "navigationUrls"
             ]
           }
         ]
@@ -3433,6 +3465,23 @@
               "assignments"
             ]
           }
+        ]
+      },
+      "NavigationUrls": {
+        "type": "object",
+        "properties": {
+          "pickup": {
+            "type": "string",
+            "format": "uri"
+          },
+          "dropoff": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "pickup",
+          "dropoff"
         ]
       }
     }

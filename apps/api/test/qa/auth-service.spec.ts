@@ -45,7 +45,6 @@ describe("QA: AuthService (unit, mocked DB)", () => {
         email: "New.User@Example.COM",
         name: "New User",
         password: PASSWORD,
-        role: "SENDER",
         ...over,
       }) as any;
 
@@ -58,10 +57,10 @@ describe("QA: AuthService (unit, mocked DB)", () => {
     });
 
     it("accepts a password of exactly 72 bytes", async () => {
-      db.user.create.mockResolvedValue({ id: "u1" });
+      db.user.create.mockResolvedValue({ id: "u1", email: "new.user@example.com", name: "New User", role: "SENDER", emailVerified: false });
       await expect(
         service.register(input({ password: "a".repeat(72) })),
-      ).resolves.toEqual({ id: "u1" });
+      ).resolves.toMatchObject({ id: "u1", role: "SENDER", verificationRequired: true });
     });
 
     it("stores a lower-case email and a bcrypt cost-12 hash, never the plain password", async () => {
@@ -73,14 +72,11 @@ describe("QA: AuthService (unit, mocked DB)", () => {
       expect(data.passwordHash).toMatch(/^\$2[aby]\$12\$/);
     });
 
-    it("creates a driver profile only for the DRIVER role", async () => {
-      db.user.create.mockResolvedValue({ id: "u1" });
+    it("always creates a sender account; public registration cannot grant driver privileges", async () => {
+      db.user.create.mockResolvedValue({ id: "u1", email: "new.user@example.com", name: "New User", role: "SENDER", emailVerified: false });
       await service.register(input({ role: "DRIVER" }));
-      expect(db.user.create.mock.calls[0][0].data.driver).toEqual({
-        create: {},
-      });
-      await service.register(input({ role: "SENDER" }));
-      expect(db.user.create.mock.calls[1][0].data.driver).toBeUndefined();
+      expect(db.user.create.mock.calls[0][0].data.role).toBe("SENDER");
+      expect(db.user.create.mock.calls[0][0].data.driver).toBeUndefined();
     });
 
     it("maps a unique-email violation to 409 and rethrows other errors", async () => {
@@ -104,6 +100,7 @@ describe("QA: AuthService (unit, mocked DB)", () => {
       id: "u1",
       role: "SENDER",
       active: true,
+      emailVerified: true,
       passwordHash: HASH,
       ...over,
     });
@@ -152,7 +149,7 @@ describe("QA: AuthService (unit, mocked DB)", () => {
       userId: "u1",
       revokedAt: null,
       expiresAt: new Date(Date.now() + 3600000),
-      user: { id: "u1", role: "DRIVER", active: true },
+      user: { id: "u1", role: "DRIVER", active: true, emailVerified: true },
       ...over,
     });
 

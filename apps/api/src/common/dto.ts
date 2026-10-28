@@ -17,6 +17,8 @@ import {
   IsEmail,
   IsDefined,
   IsUUID,
+  Matches,
+  IsBoolean,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { ServiceType, ShipmentStatus } from "@prisma/client";
@@ -152,15 +154,37 @@ export class PricingRuleDto {
 }
 export class RegisterDto {
   @ApiProperty() @IsEmail() email!: string;
-  @ApiProperty() @IsString() @MinLength(1) @MaxLength(100) name!: string;
-  @ApiProperty({ minLength: 10 })
+  @ApiProperty() @IsString() @MinLength(2) @MaxLength(100) name!: string;
+  @ApiProperty({ minLength: 10, maxLength: 72 })
   @IsString()
   @MinLength(10)
   @MaxLength(72)
   password!: string;
-  @ApiProperty({ enum: ["SENDER", "DRIVER"] })
-  @IsIn(["SENDER", "DRIVER"])
-  role!: "SENDER" | "DRIVER";
+}
+export class CreateManagedUserDto {
+  @ApiProperty() @IsEmail() email!: string;
+  @ApiProperty() @IsString() @MinLength(2) @MaxLength(100) name!: string;
+  @ApiProperty({ minLength: 10, maxLength: 72 }) @IsString() @MinLength(10) @MaxLength(72) password!: string;
+  @ApiProperty({ enum: ["DRIVER", "DISPATCHER"] }) @IsIn(["DRIVER", "DISPATCHER"]) role!: "DRIVER" | "DISPATCHER";
+}
+export class VerifyEmailDto {
+  @ApiProperty() @IsEmail() email!: string;
+  @ApiProperty({ minLength: 6, maxLength: 6, example: "123456" })
+  @IsString() @Matches(/^\d{6}$/)
+  code!: string;
+}
+export class ResendVerificationDto {
+  @ApiProperty() @IsEmail() email!: string;
+}
+export class UpdateProfileDto {
+  @ApiProperty({ minLength: 2, maxLength: 100 }) @IsString() @MinLength(2) @MaxLength(100) name!: string;
+}
+export class ChangePasswordDto {
+  @ApiProperty() @IsString() @MinLength(10) @MaxLength(72) currentPassword!: string;
+  @ApiProperty() @IsString() @MinLength(10) @MaxLength(72) newPassword!: string;
+}
+export class SetUserActiveDto {
+  @ApiProperty() @IsBoolean() active!: boolean;
 }
 export class LoginDto {
   @ApiProperty() @IsEmail() email!: string;

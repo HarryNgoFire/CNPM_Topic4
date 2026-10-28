@@ -25,7 +25,7 @@ export function openapi(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle("Topic 4 M2 API")
     .setDescription(
-      "Pricing, booking, dispatch, tracking and webhook API. Auth and schema baseline require M3 integration review.",
+      "MoveFlow last-mile delivery API with email verification, pricing, booking, dispatch, tracking, account security and webhooks.",
     )
     .setVersion("1.0.0")
     .addBearerAuth()

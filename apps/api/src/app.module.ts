@@ -10,12 +10,14 @@ import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 import { ShipmentsModule } from "./modules/shipments/shipments.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthController } from "./modules/health/health.controller";
+import { UsersModule } from "./modules/users/users.module";
 @Module({
   imports: [
     DatabaseModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
     AuthModule,
+    UsersModule,
     PricingModule,
     DispatchModule,
     WebhooksModule,

@@ -147,6 +147,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
           email: `${name.toLowerCase()}@test.local`,
           passwordHash,
           role,
+          emailVerified: true,
         },
       });
       if (role === "DRIVER") {
@@ -524,29 +525,20 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       spy.mockRestore();
     }
   });
-  it("register rejects privileged roles and creates a DRIVER profile", async () => {
+  it("public registration rejects role injection and creates an unverified sender account", async () => {
     await request(app.getHttpServer())
       .post("/api/v1/auth/register")
-      .send({
-        email: "privileged@test.local",
-        name: "admin",
-        password,
-        role: "ADMIN",
-      })
+      .send({ email: "privileged@test.local", name: "admin", password, role: "ADMIN" })
       .expect(400);
     const registered = await request(app.getHttpServer())
       .post("/api/v1/auth/register")
-      .send({
-        email: "new-driver@test.local",
-        name: "New Driver",
-        password,
-        role: "DRIVER",
-      })
+      .send({ email: "new-sender@test.local", name: "New Sender", password })
       .expect(201);
-    expect(
-      await db.driver.findUnique({ where: { userId: registered.body.id } }),
-    ).not.toBeNull();
+    expect(registered.body.role).toBe("SENDER");
+    expect(registered.body.emailVerified).toBe(false);
+    expect(registered.body.verificationRequired).toBe(true);
     expect(registered.body).not.toHaveProperty("passwordHash");
+    expect(await db.driver.findUnique({ where: { userId: registered.body.id } })).toBeNull();
   });
   it("stops automatic retries and permits dispatcher intervention after the limit", async () => {
     const shipment = await shipments.create(booking, {

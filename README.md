@@ -1,8 +1,8 @@
-# Last-Mile Express Logistics & Parcel Tracking System
+# MoveFlow — Last-Mile Delivery & Parcel Tracking System
 
-**Cập nhật M2:** Backend đã được bổ sung trong `apps/api/`. Xem [hướng dẫn chạy M2](docs/m2/README.md), [ghi chú tích hợp](docs/m2/integration.md) và [kết quả kiểm tra](docs/m2/verification.md). Các phần frontend/chatbot trong blueprint bên dưới chưa được triển khai.
+**Bản triển khai MVP:** Backend NestJS và giao diện web responsive đã được bổ sung. Xem [hướng dẫn chạy toàn bộ ứng dụng](docs/USER_GUIDE.md), [hướng dẫn xác minh email OTP](docs/EMAIL_OTP_SETUP.md), [review và các rủi ro còn lại](docs/DEVELOPER_REVIEW_AND_REMEDIATION.md), cùng [.env.example](.env.example). Frontend ở `apps/web/`; API ở `apps/api/`; database PostgreSQL/PostGIS có migrations trong `prisma/`. OSRM được dùng để tính khoảng cách đường bộ trong phạm vi demo; Google Maps URLs mở điều hướng cho tài xế mà không cần Google Maps API key.
 
-> **Project repository blueprint** — hệ thống quản lý giao hàng chặng cuối, phân công tài xế và theo dõi kiện hàng. Repository này định nghĩa cấu trúc dự án, quy ước phát triển, tài liệu kỹ thuật và các điểm cần hoàn thiện; các thư mục/file được đánh dấu `TODO`, `Proposed` hoặc `placeholder` chưa phải chức năng đã triển khai.
+> **Lưu ý:** README này còn giữ một số chương thiết kế/đề xuất từ giai đoạn lập kế hoạch. Với trạng thái chức năng hiện tại và cách chạy, ưu tiên `docs/USER_GUIDE.md`; các tính năng chưa triển khai hoặc chưa được kiểm thử đầy đủ được liệt kê trong `docs/DEVELOPER_REVIEW_AND_REMEDIATION.md`.
 
 ---
 
@@ -38,7 +38,7 @@ Dự án cũng đề xuất một chatbot hỗ trợ người dùng dựa trên 
 
 ### Trạng thái của repository
 
-Repository này là **blueprint/khung triển khai**. Không mặc định rằng tất cả chức năng, migration, endpoint, diagram hoặc test đã được viết xong. Hãy kiểm tra trạng thái từng hạng mục trong tài liệu requirements, traceability matrix và issue board của nhóm.
+Repository hiện có một **MVP có thể chạy bằng Docker Compose** gồm REST API, giao diện MoveFlow, schema/migrations, xác minh email OTP, pricing/dispatch/tracking và điều hướng Google Maps. Những phần chưa triển khai hoặc chưa kiểm chứng (ví dụ geocoding, thanh toán, COD, MFA mỗi lần đăng nhập, E2E và kiểm thử production) được nêu rõ trong tài liệu review. Các nội dung ở những chương thiết kế cũ bên dưới vẫn có thể là đề xuất, không nhất thiết phản ánh kiến trúc frontend đang chạy.
 
 ---
 
@@ -57,15 +57,16 @@ Repository này là **blueprint/khung triển khai**. Không mặc định rằn
 - Quản trị viên quản lý người dùng, tài xế và quy tắc giá cước.
 - Bảo vệ API bằng authentication, role-based authorization và kiểm tra quyền sở hữu dữ liệu.
 
-### 2.2. Hạng mục mở rộng đề xuất
+### 2.2. Hạng mục mở rộng còn đề xuất
 
-- Xác minh email khi đăng ký.
-- Quên mật khẩu và đặt lại mật khẩu.
-- Quản lý phiên đăng nhập, xoay vòng và thu hồi refresh token.
+- Quên mật khẩu và đặt lại mật khẩu qua email.
+- MFA qua email ở mỗi lần đăng nhập (hiện OTP chỉ xác minh email khi đăng ký/cấp tài khoản).
+- Geocoding tự động và chọn tuyến đường xe máy phù hợp hơn cho thị trường Việt Nam.
+- Cổng thanh toán, COD, bằng chứng giao hàng, giao thất bại/hoàn hàng.
 - Chatbot Gemini trả lời câu hỏi thường gặp.
-- Tùy chọn lưu lịch sử chat nếu có yêu cầu rõ ràng về quyền riêng tư, thời hạn lưu và xóa dữ liệu.
+- Kiểm thử E2E trình duyệt, giám sát/alert, backup tự động và quy trình triển khai production.
 
-Những hạng mục mở rộng cần được nhóm xác nhận và cập nhật vào SRS, Use Case, API contract và test plan trước khi triển khai.
+Các hạng mục này chưa được xem là hoàn thành; cần cập nhật SRS, Use Case, API contract và test plan trước khi triển khai.
 
 ---
 
@@ -73,7 +74,7 @@ Những hạng mục mở rộng cần được nhóm xác nhận và cập nh�
 
 | Thành phần | Công nghệ đề xuất | Vai trò |
 |---|---|---|
-| Frontend | Next.js, TypeScript | Giao diện người gửi, tài xế, điều phối, quản trị và chatbot |
+| Frontend hiện tại | HTML/CSS/JavaScript thuần, served qua Nginx | SPA responsive trong `apps/web`; không cần bước build frontend |
 | Backend | Node.js, NestJS, TypeScript | API, nghiệp vụ, xác thực, phân quyền và tích hợp bên ngoài |
 | Database | PostgreSQL 16 + PostGIS 3.5 | Lưu dữ liệu nghiệp vụ quan hệ |
 | Dữ liệu địa lý | PostGIS | Truy vấn tọa độ, khoảng cách và hỗ trợ phân công theo vị trí |
