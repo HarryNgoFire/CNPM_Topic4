@@ -6,6 +6,13 @@ import { DecimalInterceptor } from "./common/serialization";
 import { ErrorFilter } from "./common/errors";
 export function configure(app: INestApplication) {
   app.setGlobalPrefix("api/v1");
+  // Behind nginx every request arrives from the proxy address. Without this the
+  // rate limiter would treat all web users as one client.
+  const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (!Number.isInteger(proxyHops) || proxyHops < 0)
+    throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
+  if (proxyHops)
+    app.getHttpAdapter().getInstance().set("trust proxy", proxyHops);
   app.use(helmet());
   app.enableCors({
     origin: (process.env.CORS_ORIGIN ?? "http://localhost:3000").split(","),
