@@ -10,6 +10,7 @@ import { PricingService } from "../../src/modules/pricing/pricing.service";
 import { ShipmentsService } from "../../src/modules/shipments/shipments.service";
 import { DispatchService } from "../../src/modules/dispatch/dispatch.service";
 import { WebhooksService } from "../../src/modules/webhooks/webhooks.service";
+import { UsersService } from "../../src/modules/users/users.service";
 
 type Role = "SENDER" | "DRIVER" | "DISPATCHER" | "ADMIN";
 const ROLES: Role[] = ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"];
@@ -38,12 +39,18 @@ const ENDPOINTS: [string, string, Role[]][] = [
   ["patch", "/drivers/me/status", ["DRIVER"]],
   ["post", "/webhooks/subscriptions", ["ADMIN"]],
   ["get", "/webhooks/events", ["ADMIN"]],
+  ["get", "/users/me", ROLES],
+  ["patch", "/users/me", ROLES],
+  ["patch", "/users/me/password", ROLES],
+  ["get", "/admin/users", ["ADMIN"]],
+  ["post", "/admin/users", ["ADMIN"]],
+  ["patch", "/admin/users/:id/active", ["ADMIN"]],
 ];
 
 const stub = (...names: string[]) =>
   Object.fromEntries(names.map((n) => [n, jest.fn().mockResolvedValue({})]));
 
-describe("QA: RBAC matrix (15 endpoints x anonymous + 4 roles)", () => {
+describe("QA: RBAC matrix (21 endpoints x anonymous + 4 roles)", () => {
   let app: INestApplication;
   let jwt: JwtService;
   const db: any = {
@@ -65,6 +72,10 @@ describe("QA: RBAC matrix (15 endpoints x anonymous + 4 roles)", () => {
       .useValue(stub("assign", "respond", "queue", "tasks", "location", "status"))
       .overrideProvider(WebhooksService)
       .useValue(stub("subscribe", "events"))
+      .overrideProvider(UsersService)
+      .useValue(
+        stub("me", "updateProfile", "changePassword", "listUsers", "setUserActive"),
+      )
       .compile();
     app = moduleRef.createNestApplication();
     configure(app);
