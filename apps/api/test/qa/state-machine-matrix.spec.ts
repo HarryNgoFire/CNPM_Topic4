@@ -1,4 +1,4 @@
-import { canTransition } from "../../src/modules/shipments/shipments.service";
+import { canTransition } from "../../src/modules/shipments/state-machine";
 import { ShipmentStatus } from "@prisma/client";
 
 // Real FSM (docs/architecture): RECEIVED -> IN_TRANSIT -> OUT_FOR_DELIVERY -> DELIVERED
