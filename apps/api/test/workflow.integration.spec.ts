@@ -420,6 +420,24 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       await patch("admin", path).send({ active: true }).expect(200);
       await call("other").get("users/me").expect(200);
     });
+    it("rejects a wrong current password with 400 and keeps the sessions", async () => {
+      const where = { userId: users.other.id, revokedAt: null };
+      const sessions = await db.refreshSession.count({ where });
+      await patch("other", "users/me/password")
+        .send({ currentPassword: "not-the-password", newPassword: "another-password" })
+        .expect(400);
+      expect(await db.refreshSession.count({ where })).toBe(sessions);
+    });
+    it("revokes every session after a password change", async () => {
+      await patch("other", "users/me/password")
+        .send({ currentPassword: password, newPassword: "another-password" })
+        .expect(200);
+      expect(
+        await db.refreshSession.count({
+          where: { userId: users.other.id, revokedAt: null },
+        }),
+      ).toBe(0);
+    });
     it("removes a provisioned driver when the OTP email cannot be sent", async () => {
       const send = jest
         .spyOn(app.get(EmailDeliveryService), "sendVerificationCode")
