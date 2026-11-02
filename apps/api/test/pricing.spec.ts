@@ -49,6 +49,7 @@ describe("Pricing engine", () => {
 });
 describe("Pricing API service", () => {
   const db: any = {
+    $queryRaw: jest.fn(),
     pricingRule: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
