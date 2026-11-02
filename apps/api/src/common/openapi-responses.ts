@@ -3,10 +3,19 @@ const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 const text = { type: "string" };
 const uuid = { type: "string", format: "uuid" };
 const date = { type: "string", format: "date-time" };
+const email = { type: "string", format: "email" };
 const money = { type: "number", minimum: 0 };
 const status = {
   type: "string",
   enum: ["RECEIVED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"],
+};
+const role = {
+  type: "string",
+  enum: ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"],
+};
+const driverStatus = {
+  type: "string",
+  enum: ["OFFLINE", "AVAILABLE", "BUSY"],
 };
 const object = (
   properties: Record<string, any>,
@@ -89,7 +98,7 @@ export function addResponseContracts(doc: OpenAPIObject) {
       id: uuid,
       userId: uuid,
       vehicleType: text,
-      status: { type: "string", enum: ["OFFLINE", "AVAILABLE", "BUSY"] },
+      status: driverStatus,
       lastLocationAt: { type: ["string", "null"], format: "date-time" },
     }),
     SubscriptionResponse: object({
@@ -142,16 +151,68 @@ export function addResponseContracts(doc: OpenAPIObject) {
       accessToken: text,
       refreshToken: text,
       expiresIn: { type: "integer", const: 900 },
+      user: object({
+        id: uuid,
+        email,
+        name: text,
+        role,
+        emailVerified: { type: "boolean" },
+      }),
     }),
-    UserResponse: object({
+    RegistrationResponse: object({
       id: uuid,
-      email: { type: "string", format: "email" },
+      email,
       name: text,
-      role: {
-        type: "string",
-        enum: ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"],
-      },
+      role,
+      emailVerified: { type: "boolean", const: false },
+      verificationRequired: { type: "boolean", const: true },
     }),
+    VerifyEmailResponse: object({
+      verified: { type: "boolean", const: true },
+      email,
+    }),
+    MessageResponse: object({ ok: { type: "boolean" }, message: text }),
+    AccountSummary: object({
+      id: uuid,
+      email,
+      name: text,
+      role,
+      active: { type: "boolean" },
+      emailVerified: { type: "boolean" },
+    }),
+  };
+  schemas.AccountResponse = {
+    allOf: [ref("AccountSummary"), object({ createdAt: date })],
+  };
+  schemas.ProfileResponse = {
+    allOf: [
+      ref("AccountResponse"),
+      object({
+        driver: {
+          oneOf: [
+            object({ status: driverStatus, vehicleType: text }),
+            { type: "null" },
+          ],
+        },
+      }),
+    ],
+  };
+  schemas.AdminAccountResponse = {
+    allOf: [
+      ref("AccountResponse"),
+      object({
+        driver: {
+          oneOf: [object({ status: driverStatus }), { type: "null" }],
+        },
+      }),
+    ],
+  };
+  schemas.TransitionResponse = {
+    allOf: [
+      ref("ShipmentResponse"),
+      // Present on a repeated request that changed nothing (section 7.5).
+      object({ idempotent: { type: "boolean", const: true } }, []),
+    ],
   };
   schemas.AddressResponse = object({
     id: uuid,
@@ -227,7 +288,7 @@ export function addResponseContracts(doc: OpenAPIObject) {
     "POST /api/v1/shipments": ref("ShipmentResponse"),
     "GET /api/v1/shipments": array("ShipmentResponse"),
     "GET /api/v1/shipments/{id}": ref("ShipmentDetailResponse"),
-    "POST /api/v1/shipments/{id}/transition": ref("ShipmentResponse"),
+    "POST /api/v1/shipments/{id}/transition": ref("TransitionResponse"),
     "GET /api/v1/tracking/{trackingCode}": ref("TrackingResponse"),
     "POST /api/v1/shipments/{id}/assign-driver": {
       oneOf: [ref("AssignmentResponse"), ref("QueuedResponse")],
@@ -244,10 +305,18 @@ export function addResponseContracts(doc: OpenAPIObject) {
     "GET /api/v1/webhooks/events": array("WebhookEventResponse"),
     "GET /api/v1/admin/pricing-rules": array("PricingRuleResponse"),
     "PUT /api/v1/admin/pricing-rules/{id}": ref("PricingRuleResponse"),
-    "POST /api/v1/auth/register": ref("UserResponse"),
+    "POST /api/v1/auth/register": ref("RegistrationResponse"),
+    "POST /api/v1/auth/verify-email": ref("VerifyEmailResponse"),
+    "POST /api/v1/auth/resend-verification": ref("MessageResponse"),
     "POST /api/v1/auth/login": ref("AuthResponse"),
     "POST /api/v1/auth/refresh": ref("AuthResponse"),
     "POST /api/v1/auth/logout": object({ ok: { type: "boolean" } }),
+    "GET /api/v1/users/me": ref("ProfileResponse"),
+    "PATCH /api/v1/users/me": ref("AccountResponse"),
+    "PATCH /api/v1/users/me/password": ref("MessageResponse"),
+    "GET /api/v1/admin/users": array("AdminAccountResponse"),
+    "POST /api/v1/admin/users": ref("RegistrationResponse"),
+    "PATCH /api/v1/admin/users/{id}/active": ref("AccountSummary"),
     "GET /api/v1/health": object({ status: { type: "string", const: "ok" } }),
   };
   for (const [path, item] of Object.entries(doc.paths))

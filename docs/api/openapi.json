@@ -122,7 +122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
+                  "$ref": "#/components/schemas/RegistrationResponse"
                 }
               }
             }
@@ -222,7 +222,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyEmailResponse"
+                }
+              }
             }
           },
           "400": {
@@ -320,7 +324,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
             }
           },
           "400": {
@@ -722,7 +730,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
             }
           },
           "400": {
@@ -822,7 +834,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
             }
           },
           "400": {
@@ -924,7 +940,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
             }
           },
           "400": {
@@ -1016,7 +1036,14 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminAccountResponse"
+                  }
+                }
+              }
             }
           },
           "400": {
@@ -1116,7 +1143,11 @@
           "201": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
             }
           },
           "400": {
@@ -1227,7 +1258,11 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSummary"
+                }
+              }
             }
           },
           "400": {
@@ -2906,7 +2941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ShipmentResponse"
+                  "$ref": "#/components/schemas/TransitionResponse"
                 }
               }
             }
@@ -3095,7 +3130,7 @@
     }
   },
   "info": {
-    "title": "Topic 4 M2 API",
+    "title": "MoveFlow API",
     "description": "MoveFlow last-mile delivery API with email verification, pricing, booking, dispatch, tracking, account security and webhooks.",
     "version": "1.0.0",
     "contact": {}
@@ -4078,15 +4113,51 @@
           "expiresIn": {
             "type": "integer",
             "const": 900
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "SENDER",
+                  "DRIVER",
+                  "DISPATCHER",
+                  "ADMIN"
+                ]
+              },
+              "emailVerified": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "name",
+              "role",
+              "emailVerified"
+            ]
           }
         },
         "required": [
           "accessToken",
           "refreshToken",
-          "expiresIn"
+          "expiresIn",
+          "user"
         ]
       },
-      "UserResponse": {
+      "RegistrationResponse": {
         "type": "object",
         "properties": {
           "id": {
@@ -4108,13 +4179,210 @@
               "DISPATCHER",
               "ADMIN"
             ]
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "const": false
+          },
+          "verificationRequired": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": [
           "id",
           "email",
           "name",
-          "role"
+          "role",
+          "emailVerified",
+          "verificationRequired"
+        ]
+      },
+      "VerifyEmailResponse": {
+        "type": "object",
+        "properties": {
+          "verified": {
+            "type": "boolean",
+            "const": true
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "verified",
+          "email"
+        ]
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "message"
+        ]
+      },
+      "AccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SENDER",
+              "DRIVER",
+              "DISPATCHER",
+              "ADMIN"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "active",
+          "emailVerified"
+        ]
+      },
+      "AccountResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccountSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "createdAt"
+            ]
+          }
+        ]
+      },
+      "ProfileResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccountResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "driver": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "OFFLINE",
+                          "AVAILABLE",
+                          "BUSY"
+                        ]
+                      },
+                      "vehicleType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "vehicleType"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "driver"
+            ]
+          }
+        ]
+      },
+      "AdminAccountResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccountResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "driver": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "OFFLINE",
+                          "AVAILABLE",
+                          "BUSY"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "driver"
+            ]
+          }
+        ]
+      },
+      "TransitionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ShipmentResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "idempotent": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": []
+          }
         ]
       },
       "AddressResponse": {

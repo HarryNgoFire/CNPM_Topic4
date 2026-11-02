@@ -23,7 +23,7 @@ export function configure(app: INestApplication) {
 }
 export function openapi(app: INestApplication) {
   const config = new DocumentBuilder()
-    .setTitle("Topic 4 M2 API")
+    .setTitle("MoveFlow API")
     .setDescription(
       "MoveFlow last-mile delivery API with email verification, pricing, booking, dispatch, tracking, account security and webhooks.",
     )
