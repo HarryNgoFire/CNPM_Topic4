@@ -119,7 +119,7 @@ MVP hiện yêu cầu nhập tọa độ thủ công. Chưa có geocoding tự �
 - Đăng ký công khai chỉ tạo vai trò khách hàng (`SENDER`); không cho người dùng tự nâng quyền thành tài xế/điều phối/quản trị viên.
 - OTP được sinh ngẫu nhiên, chỉ lưu hash, hết hạn sau 10 phút và giới hạn số lần thử. Endpoint xác minh/gửi lại bị rate limit.
 - Access token và refresh token được giữ trong bộ nhớ của frontend, không lưu vào localStorage. Access token hết hạn sau 15 phút; frontend sẽ thử làm mới phiên một lần bằng refresh-token rotation. Tải lại trang vẫn cần đăng nhập lại.
-- Đổi mật khẩu hoặc khóa tài khoản sẽ thu hồi refresh session. Access token đã phát hành có thể còn hiệu lực đến hết thời hạn ngắn 15 phút.
+- Đổi mật khẩu hoặc khóa tài khoản sẽ thu hồi refresh session. Tài khoản bị khóa mất quyền truy cập ngay vì API kiểm tra trạng thái ở mỗi request; sau khi đổi mật khẩu, access token đã phát hành vẫn dùng được tối đa 15 phút.
 - OTP email hiện là xác minh địa chỉ email trong quá trình đăng ký; **chưa phải MFA bắt buộc qua email ở mỗi lần đăng nhập**.
 - OSRM public demo không có SLA và dùng profile `driving`; tuyến và khoảng cách có thể khác tuyến xe máy Google Maps. Không dùng làm dữ liệu giá cước production nếu chưa kiểm định.
 - Chưa có geocoding tự động, cổng thanh toán thật, push notification, ảnh ký nhận, COD, hoàn hàng hoặc kiểm thử trình duyệt tự động.
