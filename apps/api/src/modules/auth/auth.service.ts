@@ -52,6 +52,16 @@ export class AuthService {
     }
   }
 
+  // A provisioned driver also owns a Driver row, and that foreign key is RESTRICT.
+  private async discardUnverified(userId: string) {
+    await this.db
+      .$transaction([
+        this.db.driver.deleteMany({ where: { userId } }),
+        this.db.user.delete({ where: { id: userId } }),
+      ])
+      .catch(() => undefined);
+  }
+
   async register(input: RegisterDto) {
     if (Buffer.byteLength(input.password) > 72)
       throw new BadRequestException("Password exceeds 72 UTF-8 bytes");
@@ -77,7 +87,7 @@ export class AuthService {
       await this.createAndSendCode(user);
     } catch (error) {
       // Do not leave a dead, unverified account after a delivery failure.
-      await this.db.user.delete({ where: { id: user.id } }).catch(() => undefined);
+      await this.discardUnverified(user.id);
       if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException("Could not send verification email");
     }
@@ -105,7 +115,7 @@ export class AuthService {
     try {
       await this.createAndSendCode(user);
     } catch (error) {
-      await this.db.user.delete({ where: { id: user.id } }).catch(() => undefined);
+      await this.discardUnverified(user.id);
       if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException("Could not send verification email");
     }
