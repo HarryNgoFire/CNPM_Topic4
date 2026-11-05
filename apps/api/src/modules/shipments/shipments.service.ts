@@ -135,7 +135,7 @@ export class ShipmentsService {
     const coordinates = locations[0];
     return {
       ...shipment,
-      navigationUrls: coordinates
+      navigationUrls: actor.role === "DRIVER" && coordinates
         ? {
             pickup: buildGoogleMapsDirectionsUrl({
               lat: coordinates.pickupLat,

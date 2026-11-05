@@ -10,6 +10,7 @@ type OsrmResponse = {
   code?: string;
   message?: string;
   routes?: Array<{ distance?: unknown; duration?: unknown }>;
+  waypoints?: Array<{ distance?: number }>;
 };
 
 type CachedRoute = { distanceKm: number; expiresAt: number };
@@ -118,6 +119,10 @@ export class OsrmRoutingService {
       );
     }
 
+    // OSRM may snap a pin to a far-away road; reject obviously wrong matches.
+    if (payload.waypoints?.some((point) => typeof point.distance === "number" && point.distance > 250)) {
+      throw new ServiceUnavailableException("Selected pin is too far from a routable road (>250 m). Reposition the pin to the correct road entrance.");
+    }
     const distanceKm = distanceMeters / 1000;
     this.cacheRoute(cacheKey, distanceKm);
     return { distanceKm, distanceSource: "OSRM_DRIVING" };

@@ -1,10 +1,7 @@
 import { Injectable, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
+import nodemailer from "nodemailer";
 
-/**
- * Sends one-time email verification codes with Resend's HTTPS API.
- * No provider secret is ever returned to the client. For local development only,
- * EMAIL_DELIVERY_MODE=console prints a code when NODE_ENV is not production.
- */
+/** SMTP email OTP delivery. Use Gmail App Password, never the normal login password. */
 @Injectable()
 export class EmailDeliveryService implements OnModuleInit {
   onModuleInit() {
@@ -17,45 +14,30 @@ export class EmailDeliveryService implements OnModuleInit {
   }
 
   async sendVerificationCode(to: string, name: string, code: string) {
-    const mode = (process.env.EMAIL_DELIVERY_MODE ?? (process.env.NODE_ENV === "test" ? "console" : "resend")).toLowerCase();
+    const mode = (process.env.EMAIL_DELIVERY_MODE ?? (process.env.NODE_ENV === "test" ? "console" : "smtp")).toLowerCase();
     if (mode === "console" && process.env.NODE_ENV !== "production") {
-      // Explicitly opt-in development fallback; never enabled in production.
       console.info(`[DEV EMAIL OTP] to=${to} code=${code} expires_in_minutes=10`);
       return;
     }
-
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
-    if (!apiKey || !from) {
-      throw new ServiceUnavailableException(
-        "Email verification is not configured. Set RESEND_API_KEY and EMAIL_FROM.",
-      );
+    if (mode !== "smtp") throw new ServiceUnavailableException("Unsupported EMAIL_DELIVERY_MODE");
+    const user = process.env.SMTP_USER;
+    const password = process.env.SMTP_APP_PASSWORD?.replace(/\s/g, "");
+    const from = process.env.EMAIL_FROM || user;
+    if (!user || !password || !from) {
+      throw new ServiceUnavailableException("SMTP is not configured. Set SMTP_USER and SMTP_APP_PASSWORD.");
     }
-
-    const firstName = (name.trim().split(/\s+/).at(-1) || "bạn").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char] || ""));
-    let response: Response;
+    const host = process.env.SMTP_HOST || "smtp.gmail.com";
+    const port = Number(process.env.SMTP_PORT || 465);
+    const firstName = (name.trim().split(/\s+/).at(-1) || "bạn").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" }[char] || ""));
     try {
-      response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from,
-          to: [to],
-          subject: "Mã xác thực tài khoản MoveFlow",
-          text: `Xin chào ${firstName}, mã xác thực tài khoản của bạn là ${code}. Mã có hiệu lực trong 10 phút. Nếu bạn không tạo tài khoản, hãy bỏ qua email này.`,
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#18233d"><p>Xin chào ${firstName},</p><h2>Xác thực email của bạn</h2><p>Nhập mã xác thực bên dưới để hoàn tất đăng ký MoveFlow.</p><div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0f4ff;padding:20px;border-radius:12px;text-align:center">${code}</div><p>Mã có hiệu lực trong <b>10 phút</b>. Không chia sẻ mã này với bất kỳ ai.</p><p>Nếu bạn không tạo tài khoản, hãy bỏ qua email này.</p></div>`,
-        }),
-        signal: AbortSignal.timeout(8000),
+      const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass: password }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
+      await transporter.sendMail({
+        from, to, subject: "Mã xác thực tài khoản MoveFlow",
+        text: `Xin chào ${name}, mã xác thực MoveFlow của bạn là ${code}. Mã có hiệu lực trong 10 phút.`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#18233d"><p>Xin chào ${firstName},</p><h2>Xác thực email MoveFlow</h2><div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0f4ff;padding:20px;border-radius:12px;text-align:center">${code}</div><p>Mã có hiệu lực 10 phút. Không chia sẻ mã này.</p></div>`,
       });
     } catch {
-      throw new ServiceUnavailableException("Unable to deliver verification email. Try again later.");
-    }
-    if (!response.ok) {
-      // Avoid leaking raw provider error responses to users or logs.
-      throw new ServiceUnavailableException("Email provider rejected the verification email. Check sender configuration.");
+      throw new ServiceUnavailableException("Cannot send OTP by SMTP. Check Gmail App Password, SMTP access and network.");
     }
   }
 }

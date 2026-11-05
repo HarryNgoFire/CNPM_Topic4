@@ -2,8 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  HttpException,
+  HttpStatus,
   UnauthorizedException,
-  TooManyRequestsException,
   ServiceUnavailableException,
   Optional,
 } from "@nestjs/common";
@@ -122,7 +123,8 @@ export class AuthService {
     });
     if (!record || record.expiresAt <= new Date())
       throw new BadRequestException("Code is invalid or expired");
-    if (record.attempts >= 5) throw new TooManyRequestsException("Too many incorrect codes. Request a new code.");
+    if (record.attempts >= 5)
+      throw new HttpException("Too many incorrect codes. Request a new code.", HttpStatus.TOO_MANY_REQUESTS);
     const expected = Buffer.from(record.codeHash, "hex");
     const actual = Buffer.from(this.otpHash(email, code), "hex");
     const valid = expected.length === actual.length && timingSafeEqual(expected, actual);
