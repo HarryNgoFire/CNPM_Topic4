@@ -113,22 +113,23 @@ Tài liệu triển khai mô tả 9 bảng ở mức khái niệm. Schema thực
 
 ## Trạng thái kiểm thử
 
-Chạy ngày 03/11/2026 trên bản gộp của các nhánh M3, trong container Node 22.22.3 và PostgreSQL 16/PostGIS 3.5:
+Chạy ngày 08/11/2026 trên bản gộp của các nhánh M3 sau khi rebase lên `main` tại `a2f7379`, trong container Node 22.22.3 và PostgreSQL 16/PostGIS 3.5:
 
 | Kiểm tra                                        | Kết quả                            |
 | ----------------------------------------------- | ---------------------------------- |
 | lint, typecheck, build, OpenAPI không lệch      | Pass                               |
-| Unit và HTTP                                    | 294 pass                           |
+| Unit và HTTP                                    | 295 pass                           |
 | Integration trên PostGIS                        | 40 pass, gồm ST-01..08             |
 | `docker compose up` từ volume trống             | Pass ngay lần đầu, gồm cả ảnh API  |
 | `scripts/qa/smoke-flow.ps1` trên Compose        | 12/12                              |
 | Coverage `state-machine.ts`, `security.ts`      | 100%                               |
-| Coverage toàn bộ phần đo được                   | 76,19% câu lệnh                    |
+| Coverage toàn bộ phần đo được                   | 75,49% câu lệnh                    |
 
-Con số 76,19% thấp hơn các báo cáo trước vì phạm vi đo đã rộng hơn. `auth.service.ts` và `users.service.ts` chủ yếu được kiểm bằng integration test, nên coverage ở mức unit thấp (45% và 17%).
+Con số 75,49% thấp hơn các báo cáo trước vì phạm vi đo đã rộng hơn. `auth.service.ts` và `users.service.ts` chủ yếu được kiểm bằng integration test, nên coverage ở mức unit thấp (45% và 17%).
 
 ## Lưu ý khi demo
 
 - Vị trí tài xế hết hạn sau 300 giây và giao diện web chưa gửi vị trí. Hãy chạy lại `npm run db:seed` ngay trước demo, hoặc đặt `MAX_LOCATION_AGE_SECONDS` lớn hơn trong `.env`. Nếu không, đơn mới sẽ không tìm được tài xế.
 - Seed tạo sẵn đơn đã giao với mã `MOVEFLOWDEMO0001` để minh họa tra cứu công khai.
+- Muốn thử đăng ký mà không gửi email thật, đặt `EMAIL_DELIVERY_MODE=console` và `NODE_ENV=development` trong `.env`, rồi đọc mã bằng `docker compose logs api`. Image API mặc định chạy `NODE_ENV=production`, ở chế độ đó console bị từ chối và đăng ký trả 503.
 - Seed không đổi mật khẩu của tài khoản đã tồn tại. Nếu đổi `DEMO_PASSWORD` sau lần seed đầu, mật khẩu cũ vẫn có hiệu lực.

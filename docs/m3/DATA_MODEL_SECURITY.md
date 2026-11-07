@@ -82,7 +82,7 @@ Tất cả chạy trên PostGIS thật. Khi bỏ `FOR UPDATE` khỏi code, các 
 - **Access token:** JWT HS256, sống 15 phút, kiểm tra cả `issuer` và `audience`. API không khởi động nếu `JWT_SECRET` ngắn hơn 32 ký tự hoặc còn là giá trị mẫu.
 - **Refresh token:** chuỗi ngẫu nhiên 48 byte, sống 7 ngày, chỉ lưu hash SHA-256. Mỗi lần làm mới, token cũ bị thu hồi trong transaction có khóa dòng. Đăng xuất, đổi mật khẩu và khóa tài khoản đều thu hồi phiên.
 - **Đăng ký công khai:** chỉ tạo tài khoản `SENDER`. Tài xế và điều phối viên do Admin cấp, vì vậy không ai tự nâng quyền được.
-- **Xác minh email:** mã OTP 6 chữ số, chỉ lưu HMAC-SHA256, hết hạn sau 10 phút, tối đa 5 lần thử rồi trả 429, gửi lại cách nhau tối thiểu 60 giây. Endpoint gửi lại trả cùng một câu trả lời cho mọi email để không lộ tài khoản nào tồn tại.
+- **Xác minh email:** mã OTP 6 chữ số, chỉ lưu HMAC-SHA256, hết hạn sau 10 phút, tối đa 5 lần thử rồi trả 429, gửi lại cách nhau tối thiểu 60 giây. Endpoint gửi lại trả cùng một câu trả lời cho mọi email để không lộ tài khoản nào tồn tại. Mã được gửi qua SMTP bằng App Password của Gmail; chế độ in mã ra log chỉ chạy khi `NODE_ENV` khác `production`.
 - **Đăng nhập:** tài khoản không tồn tại vẫn tốn thời gian so sánh bcrypt, giảm khả năng dò email qua thời gian phản hồi.
 
 ### Hai lớp guard
@@ -121,9 +121,9 @@ Ma trận này được kiểm bằng test cho 21 endpoint, mỗi endpoint với
 | Tra cứu công khai  | Mã 64 bit từ nguồn ngẫu nhiên mật mã; chỉ trả mã, trạng thái, thời gian và thành phố             |
 | Lỗi                | Không trả stack trace; lỗi 500 có `requestId` để truy vết                                        |
 | Webhook            | Ký HMAC-SHA256 trên nội dung gốc, chỉ gửi tới origin trong danh sách cho phép                    |
-| Secret             | Nằm trong `.env` đã bị Git bỏ qua; `.env.example` chỉ chứa giá trị mẫu                           |
+| Secret             | `JWT_SECRET`, `OTP_SECRET`, App Password SMTP nằm trong `.env` đã bị Git bỏ qua; `.env.example` chỉ chứa giá trị mẫu |
 
-Đã quét toàn bộ lịch sử Git theo mẫu khóa Resend, khóa Google và private key: không có secret thật, chỉ có giá trị minh họa trong tài liệu.
+Ngày 08/11/2026 đã quét lại toàn bộ lịch sử Git, kể cả các nhánh trên GitHub, theo mẫu khóa Resend, khóa Google, App Password Gmail và private key: không có secret thật, chỉ có giá trị minh họa trong tài liệu.
 
 ## 6. Điểm khác so với tài liệu triển khai
 
