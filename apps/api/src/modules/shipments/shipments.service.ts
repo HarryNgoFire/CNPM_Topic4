@@ -12,16 +12,7 @@ import { AddressDto, BookingDto, ShipmentPageDto } from "../../common/dto";
 import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
-export function canTransition(current: ShipmentStatus, next: ShipmentStatus) {
-  const states: ShipmentStatus[] = [
-    "RECEIVED",
-    "IN_TRANSIT",
-    "OUT_FOR_DELIVERY",
-    "DELIVERED",
-  ];
-  const from = states.indexOf(current);
-  return from >= 0 && states.indexOf(next) === from + 1;
-}
+import { canTransition } from "./state-machine";
 @Injectable()
 export class ShipmentsService {
   constructor(
@@ -183,7 +174,9 @@ export class ShipmentsService {
         throw new ForbiddenException();
       if (shipment.status === next) return { ...shipment, idempotent: true };
       if (!canTransition(shipment.status, next))
-        throw new ConflictException("Invalid status transition");
+        throw new ConflictException(
+          `Invalid status transition: ${shipment.status} -> ${next}`,
+        );
       if (!assignment || assignment.status !== "ACCEPTED")
         throw new ConflictException("No accepted driver");
       const updated = await tx.shipment.update({

@@ -394,6 +394,139 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .send({ toStatus: "IN_TRANSIT" })
       .expect(403);
   });
+  describe("state machine (section 17.2)", () => {
+    const move = (id: string, toStatus: string, name = "driverA") =>
+      call(name).post(`shipments/${id}/transition`).send({ toStatus });
+    const history = (shipmentId: string) =>
+      db.shipmentStatusHistory.findMany({
+        where: { shipmentId },
+        orderBy: { occurredAt: "asc" },
+      });
+    const events = (shipmentId: string) =>
+      db.webhookEvent.count({ where: { shipmentId } });
+    async function accepted() {
+      const shipment = await create();
+      const assignment = await pending(shipment.id);
+      await call("driverA")
+        .post(`assignments/${assignment.id}/respond`)
+        .send({ action: "ACCEPT" })
+        .expect(200);
+      return { shipment, assignment };
+    }
+    it("ST-01..03 records each forward step and releases the driver at the end", async () => {
+      const { shipment, assignment } = await accepted();
+      for (const status of ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"])
+        await move(shipment.id, status).expect(200);
+      const steps = await history(shipment.id);
+      expect(steps.map((step) => [step.fromStatus, step.toStatus])).toEqual([
+        [null, "RECEIVED"],
+        ["RECEIVED", "IN_TRANSIT"],
+        ["IN_TRANSIT", "OUT_FOR_DELIVERY"],
+        ["OUT_FOR_DELIVERY", "DELIVERED"],
+      ]);
+      expect(steps.slice(1).map((step) => step.changedBy)).toEqual(
+        Array(3).fill(users.driverA.id),
+      );
+      expect(await events(shipment.id)).toBe(4);
+      const finished = await db.driverAssignment.findUniqueOrThrow({
+        where: { id: assignment.id },
+        include: { driver: true },
+      });
+      expect(finished.status).toBe("COMPLETED");
+      expect(finished.driver.status).toBe("AVAILABLE");
+    });
+    it("ST-04 rejects a skipped step and changes nothing", async () => {
+      const { shipment } = await accepted();
+      const res = await move(shipment.id, "DELIVERED").expect(409);
+      expect(JSON.stringify(res.body)).toContain("RECEIVED -> DELIVERED");
+      expect(await history(shipment.id)).toHaveLength(1);
+      expect(await events(shipment.id)).toBe(1);
+    });
+    it("ST-05 keeps DELIVERED terminal", async () => {
+      const { shipment } = await accepted();
+      for (const status of ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"])
+        await move(shipment.id, status).expect(200);
+      for (const status of ["RECEIVED", "IN_TRANSIT", "OUT_FOR_DELIVERY"])
+        await move(shipment.id, status).expect(409);
+      expect(await history(shipment.id)).toHaveLength(4);
+    });
+    it("ST-06 treats a repeated status as idempotent", async () => {
+      const { shipment } = await accepted();
+      await move(shipment.id, "IN_TRANSIT").expect(200);
+      const repeat = await move(shipment.id, "IN_TRANSIT").expect(200);
+      expect(repeat.body.idempotent).toBe(true);
+      expect(await history(shipment.id)).toHaveLength(2);
+      expect(await events(shipment.id)).toBe(2);
+    });
+    it("ST-07 forbids a driver without the accepted assignment", async () => {
+      const { shipment } = await accepted();
+      await move(shipment.id, "IN_TRANSIT", "driverB").expect(403);
+      expect(await history(shipment.id)).toHaveLength(1);
+    });
+    it("ST-07 forbids a driver who has not accepted yet", async () => {
+      const shipment = await create();
+      await move(shipment.id, "IN_TRANSIT").expect(403);
+    });
+    it("ST-08 applies only one of many simultaneous requests", async () => {
+      const { shipment } = await accepted();
+      const replies = await Promise.all(
+        Array.from({ length: 8 }, () => move(shipment.id, "IN_TRANSIT")),
+      );
+      expect(replies.map((reply) => reply.status)).toEqual(Array(8).fill(200));
+      expect(replies.filter((reply) => !reply.body.idempotent)).toHaveLength(1);
+      expect(await history(shipment.id)).toHaveLength(2);
+      expect(await events(shipment.id)).toBe(2);
+    });
+    it("BR-STATE-03 undoes the status change if the webhook event fails", async () => {
+      const { shipment } = await accepted();
+      const record = jest
+        .spyOn(webhooks, "record")
+        .mockRejectedValueOnce(new Error("outbox unavailable"));
+      await move(shipment.id, "IN_TRANSIT").expect(500);
+      record.mockRestore();
+      const stored = await db.shipment.findUniqueOrThrow({
+        where: { id: shipment.id },
+      });
+      expect(stored.status).toBe("RECEIVED");
+      expect(await history(shipment.id)).toHaveLength(1);
+      await move(shipment.id, "IN_TRANSIT").expect(200);
+    });
+  });
+  describe("database guarantees", () => {
+    it("keeps the status history append-only", async () => {
+      const shipment = await create();
+      await expect(
+        db.$executeRaw`UPDATE "ShipmentStatusHistory" SET "toStatus"='DELIVERED' WHERE "shipmentId"=${shipment.id}::uuid`,
+      ).rejects.toThrow();
+      await expect(
+        db.$executeRaw`DELETE FROM "ShipmentStatusHistory" WHERE "shipmentId"=${shipment.id}::uuid`,
+      ).rejects.toThrow();
+    });
+    it("keeps the fee snapshot immutable", async () => {
+      const shipment = await create();
+      await expect(
+        db.$executeRaw`UPDATE "Shipment" SET fee=1 WHERE id=${shipment.id}::uuid`,
+      ).rejects.toThrow();
+    });
+    it("refuses to delete a sender who still owns a shipment", async () => {
+      const { pickupAddressId, dropoffAddressId } = await create();
+      await db.shipment.create({
+        data: {
+          senderId: users.other.id,
+          pickupAddressId,
+          dropoffAddressId,
+          trackingCode: "ABCDEF1234567890",
+          serviceType: "STANDARD",
+          fee: 15000,
+          feeBreakdown: {},
+        },
+      });
+      await db.refreshSession.deleteMany({ where: { userId: users.other.id } });
+      await expect(
+        db.$executeRaw`DELETE FROM "User" WHERE id=${users.other.id}::uuid`,
+      ).rejects.toThrow("Shipment_senderId_fkey");
+    });
+  });
   it("blocks sender access to another sender shipment", async () => {
     const shipment = await create();
     await call("other")
