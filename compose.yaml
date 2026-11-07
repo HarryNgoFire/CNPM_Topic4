@@ -30,7 +30,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://topic4:${POSTGRES_PASSWORD}@db:5432/topic4
-    ports: ["3001:3001"]
+      # nginx in the web service is the only trusted hop; the port below stays
+      # on loopback so X-Forwarded-For cannot be forged from another machine.
+      TRUST_PROXY_HOPS: "1"
+    ports: ["127.0.0.1:3001:3001"]
     depends_on:
       migrate: {condition: service_completed_successfully}
     healthcheck:
