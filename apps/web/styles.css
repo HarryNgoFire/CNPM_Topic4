@@ -8,3 +8,22 @@
 .map-overlay { position:fixed; inset:0; background:rgba(10,21,40,.74); z-index:10000; display:flex; justify-content:center; align-items:center; padding:18px; }
 .map-dialog { background:white; color:#152b52; width:min(800px,100%); max-height:95vh; overflow-y:auto; border-radius:18px; padding:22px; box-shadow:0 16px 70px #0005; }
 .map-dialog .leaflet-container { z-index:1; }
+
+/* Fix lỗi vỡ tile Leaflet trong modal */
+#address-picker-map .leaflet-pane,
+#address-picker-map .leaflet-tile,
+#address-picker-map .leaflet-marker-icon,
+#address-picker-map .leaflet-marker-shadow,
+#address-picker-map .leaflet-tile-container {
+  position: absolute !important;
+  left: 0;
+  top: 0;
+}
+#address-picker-map img.leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+  width: 256px !important;
+  height: 256px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
