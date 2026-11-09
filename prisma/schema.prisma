@@ -73,6 +73,8 @@ model Driver {
   status DriverStatus @default(OFFLINE)
   currentLocation Unsupported("geography(Point,4326)")?
   lastLocationAt DateTime?
+  locationAccuracyM Float?
+  locationCapturedAt DateTime?
   user User @relation(fields:[userId],references:[id])
   assignments DriverAssignment[]
 }

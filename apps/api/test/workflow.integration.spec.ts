@@ -593,4 +593,26 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
         .status,
     ).toBe("AVAILABLE");
   });
+  it("tracks driver GPS location with throttling and metadata", async () => {
+    const t0 = new Date(Date.now() - 10000).toISOString();
+    const res1 = await request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", "Bearer " + tokens.driverA)
+      .send({ lat: 10.754, lng: 106.663, accuracyM: 12.5, capturedAt: t0 })
+      .expect(200);
+    expect(res1.body.accepted).toBe(true);
+    expect(res1.body.lat).toBe(10.754);
+    expect(res1.body.lng).toBe(106.663);
+    expect(res1.body.capturedAt).toBe(t0);
+
+    // Fast repeated update (< 5s) is throttled
+    const t1 = new Date(Date.now() - 8000).toISOString();
+    const res2 = await request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", "Bearer " + tokens.driverA)
+      .send({ lat: 10.755, lng: 106.664, accuracyM: 10, capturedAt: t1 })
+      .expect(200);
+    expect(res2.body.accepted).toBe(false);
+    expect(res2.body.reason).toBe("TOO_SOON");
+  });
 });

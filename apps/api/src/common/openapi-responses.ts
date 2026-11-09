@@ -251,8 +251,12 @@ export function addResponseContracts(doc: OpenAPIObject) {
     "GET /api/v1/dispatch/queue": array("DispatchQueueResponse"),
     "GET /api/v1/drivers/me/tasks": array("DriverTaskResponse"),
     "PATCH /api/v1/drivers/me/location": object({
+      accepted: { type: "boolean" },
+      reason: { type: "string", enum: ["TOO_SOON", "STATIONARY"] },
       lat: { type: "number", minimum: -90, maximum: 90 },
       lng: { type: "number", minimum: -180, maximum: 180 },
+      capturedAt: date,
+      receivedAt: date,
     }),
     "PATCH /api/v1/drivers/me/status": ref("DriverResponse"),
     "POST /api/v1/webhooks/subscriptions": ref("SubscriptionResponse"),

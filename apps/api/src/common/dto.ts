@@ -19,12 +19,27 @@ import {
   IsUUID,
   Matches,
   IsBoolean,
+  IsISO8601,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { ServiceType, ShipmentStatus } from "@prisma/client";
 export class PointDto {
   @ApiProperty({ example: 10.754 }) @IsNumber() @IsLatitude() lat!: number;
   @ApiProperty({ example: 106.663 }) @IsNumber() @IsLongitude() lng!: number;
+}
+export class DriverLocationDto extends PointDto {
+  @ApiPropertyOptional({ example: 10.5, description: "Accuracy in meters (max 200)" })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  @Max(200)
+  accuracyM?: number;
+
+  @ApiPropertyOptional({ example: "2026-11-10T02:00:00.000Z", description: "ISO 8601 capture timestamp" })
+  @IsOptional()
+  @IsString()
+  @IsISO8601()
+  capturedAt?: string;
 }
 export class AddressDto extends PointDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(255) line!: string;

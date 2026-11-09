@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -9,9 +10,19 @@ import { Interval } from "@nestjs/schedule";
 import { DriverStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
-import { PointDto } from "../../common/dto";
+import { DriverLocationDto } from "../../common/dto";
 import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { evaluateDriverGps } from "../../common/geo";
+
+export type LocationUpdateResult = {
+  accepted: boolean;
+  reason?: "TOO_SOON" | "STATIONARY";
+  lat: number;
+  lng: number;
+  capturedAt: string;
+  receivedAt: string;
+};
 function setting(name: string, fallback: number) {
   const v = Number(process.env[name] ?? fallback);
   if (!Number.isFinite(v) || v <= 0) throw new Error(`Invalid ${name}`);
@@ -238,11 +249,94 @@ export class DispatchService {
       };
     });
   }
-  async location(actor: Actor, input: PointDto) {
+  async location(
+    actor: Actor,
+    input: DriverLocationDto,
+  ): Promise<LocationUpdateResult> {
     const driver = await this.driverFor(actor);
-    await this.db
-      .$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${input.lng},${input.lat}),4326)::geography,"lastLocationAt"=now() WHERE id=${driver.id}::uuid`;
-    return { lat: input.lat, lng: input.lng };
+    const serverNow = new Date();
+
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Driver" WHERE id=${driver.id}::uuid FOR UPDATE`;
+
+      const priorRows = await tx.$queryRaw<
+        Array<{
+          lat: number | null;
+          lng: number | null;
+          locationAccuracyM: number | null;
+          locationCapturedAt: Date | null;
+        }>
+      >`
+        SELECT
+          ST_Y("currentLocation"::geometry)::double precision AS lat,
+          ST_X("currentLocation"::geometry)::double precision AS lng,
+          "locationAccuracyM",
+          "locationCapturedAt"
+        FROM "Driver"
+        WHERE id = ${driver.id}::uuid
+      `;
+
+      const prior = priorRows[0];
+      const priorData =
+        prior &&
+        prior.lat !== null &&
+        prior.lng !== null &&
+        prior.locationCapturedAt !== null
+          ? {
+              lat: prior.lat,
+              lng: prior.lng,
+              locationCapturedAt: prior.locationCapturedAt,
+            }
+          : null;
+
+      const evalResult = evaluateDriverGps({
+        current: {
+          lat: input.lat,
+          lng: input.lng,
+          accuracyM: input.accuracyM ?? 10,
+          capturedAt: input.capturedAt ?? serverNow.toISOString(),
+        },
+        prior: priorData,
+        serverNow,
+      });
+
+      if (!evalResult.valid) {
+        throw new BadRequestException(evalResult.error);
+      }
+
+      const capturedAtIso =
+        input.capturedAt ?? serverNow.toISOString();
+      const receivedAtIso = serverNow.toISOString();
+
+      if (!evalResult.accepted) {
+        return {
+          accepted: false,
+          reason: evalResult.reason,
+          lat: input.lat,
+          lng: input.lng,
+          capturedAt: capturedAtIso,
+          receivedAt: receivedAtIso,
+        };
+      }
+
+      const capturedDate = new Date(capturedAtIso);
+      await tx.$executeRaw`
+        UPDATE "Driver" SET
+          "currentLocation" = ST_SetSRID(ST_MakePoint(${input.lng}, ${input.lat}), 4326)::geography,
+          "lastLocationAt" = ${serverNow},
+          "locationAccuracyM" = ${input.accuracyM ?? 10},
+          "locationCapturedAt" = ${capturedDate}
+        WHERE id = ${driver.id}::uuid
+      `;
+
+      return {
+        accepted: true,
+        lat: input.lat,
+        lng: input.lng,
+        capturedAt: capturedAtIso,
+        receivedAt: receivedAtIso,
+      };
+    });
   }
   async status(actor: Actor, status: "AVAILABLE" | "OFFLINE") {
     const driver = await this.driverFor(actor);

@@ -206,12 +206,178 @@ describe("Driver dispatch", () => {
     db.driverAssignment.findUnique.mockResolvedValue(null);
     await expect(service.respond("bad", "ACCEPT", actor)).rejects.toThrow();
   });
-  it("updates location through parameterized geography query", async () => {
-    expect(await service.location(actor, { lat: 10, lng: 106 })).toEqual({
-      lat: 10,
-      lng: 106,
+  describe("Driver location updates and GPS throttling", () => {
+    const baseNow = new Date("2026-11-10T02:00:00.000Z");
+
+    it("accepts valid initial location and distinct capture vs received times", async () => {
+      db.$queryRaw.mockResolvedValue([]);
+      const capturedAt = new Date(Date.now() - 10000).toISOString();
+      const result = await service.location(actor, {
+        lat: 10.754,
+        lng: 106.663,
+        accuracyM: 15,
+        capturedAt,
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(result.lat).toBe(10.754);
+      expect(result.lng).toBe(106.663);
+      expect(result.capturedAt).toBe(capturedAt);
+      expect(result.receivedAt).toBeDefined();
+      expect(result.receivedAt).not.toBe(capturedAt);
+      expect(db.$executeRaw).toHaveBeenCalledTimes(1);
     });
-    expect(db.$executeRaw).toHaveBeenCalledTimes(1);
+
+    it("requires authenticated driver profile", async () => {
+      db.driver.findUnique.mockResolvedValue(null);
+      await expect(
+        service.location(actor, {
+          lat: 10.754,
+          lng: 106.663,
+          accuracyM: 15,
+          capturedAt: baseNow.toISOString(),
+        }),
+      ).rejects.toThrow("Driver profile not found");
+    });
+
+    it("rejects inaccurate points (> 200m)", async () => {
+      db.$queryRaw.mockResolvedValue([]);
+      await expect(
+        service.location(actor, {
+          lat: 10.754,
+          lng: 106.663,
+          accuracyM: 250,
+          capturedAt: baseNow.toISOString(),
+        }),
+      ).rejects.toThrow("Accuracy must be positive and at most 200m");
+    });
+
+    it("rejects stale points (> 300s)", async () => {
+      db.$queryRaw.mockResolvedValue([]);
+      const staleTime = new Date(Date.now() - 350000).toISOString();
+      await expect(
+        service.location(actor, {
+          lat: 10.754,
+          lng: 106.663,
+          accuracyM: 15,
+          capturedAt: staleTime,
+        }),
+      ).rejects.toThrow("Timestamp is stale");
+    });
+
+    it("rejects future points beyond allowed skew (> 30s)", async () => {
+      db.$queryRaw.mockResolvedValue([]);
+      const futureTime = new Date(Date.now() + 45000).toISOString();
+      await expect(
+        service.location(actor, {
+          lat: 10.754,
+          lng: 106.663,
+          accuracyM: 15,
+          capturedAt: futureTime,
+        }),
+      ).rejects.toThrow("Timestamp is too far in the future");
+    });
+
+    it("rejects implausible speed (> 55 m/s)", async () => {
+      const priorCapturedAt = new Date(Date.now() - 20000);
+      const currentCapturedAt = new Date(Date.now() - 10000);
+      db.$queryRaw
+        .mockResolvedValueOnce([{ id: "driver" }])
+        .mockResolvedValueOnce([
+          {
+            lat: 10.7725,
+            lng: 106.698,
+            locationAccuracyM: 10,
+            locationCapturedAt: priorCapturedAt,
+          },
+        ]);
+
+      await expect(
+        service.location(actor, {
+          lat: 10.7495,
+          lng: 106.6525,
+          accuracyM: 10,
+          capturedAt: currentCapturedAt.toISOString(),
+        }),
+      ).rejects.toThrow("Implausible speed detected");
+    });
+
+    it("throttles updates inside 5 seconds with TOO_SOON and does not execute update query", async () => {
+      const priorCapturedAt = new Date(Date.now() - 2000);
+      const currentCapturedAt = new Date();
+      db.$queryRaw
+        .mockResolvedValueOnce([{ id: "driver" }])
+        .mockResolvedValueOnce([
+          {
+            lat: 10.754,
+            lng: 106.663,
+            locationAccuracyM: 10,
+            locationCapturedAt: priorCapturedAt,
+          },
+        ]);
+
+      const result = await service.location(actor, {
+        lat: 10.7545,
+        lng: 106.6635,
+        accuracyM: 10,
+        capturedAt: currentCapturedAt.toISOString(),
+      });
+
+      expect(result.accepted).toBe(false);
+      expect(result.reason).toBe("TOO_SOON");
+      expect(db.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it("throttles stationary updates (< 15m) inside 60 seconds with STATIONARY", async () => {
+      const priorCapturedAt = new Date(Date.now() - 15000);
+      const currentCapturedAt = new Date();
+      db.$queryRaw
+        .mockResolvedValueOnce([{ id: "driver" }])
+        .mockResolvedValueOnce([
+          {
+            lat: 10.754,
+            lng: 106.663,
+            locationAccuracyM: 10,
+            locationCapturedAt: priorCapturedAt,
+          },
+        ]);
+
+      const result = await service.location(actor, {
+        lat: 10.75401,
+        lng: 106.66301,
+        accuracyM: 10,
+        capturedAt: currentCapturedAt.toISOString(),
+      });
+
+      expect(result.accepted).toBe(false);
+      expect(result.reason).toBe("STATIONARY");
+      expect(db.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it("accepts stationary heartbeat after 60 seconds", async () => {
+      const priorCapturedAt = new Date(Date.now() - 65000);
+      const currentCapturedAt = new Date();
+      db.$queryRaw
+        .mockResolvedValueOnce([{ id: "driver" }])
+        .mockResolvedValueOnce([
+          {
+            lat: 10.754,
+            lng: 106.663,
+            locationAccuracyM: 10,
+            locationCapturedAt: priorCapturedAt,
+          },
+        ]);
+
+      const result = await service.location(actor, {
+        lat: 10.75401,
+        lng: 106.66301,
+        accuracyM: 10,
+        capturedAt: currentCapturedAt.toISOString(),
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(db.$executeRaw).toHaveBeenCalledTimes(1);
+    });
   });
   it("lists only pending and accepted tasks", async () => {
     db.driverAssignment.findMany.mockResolvedValue([]);

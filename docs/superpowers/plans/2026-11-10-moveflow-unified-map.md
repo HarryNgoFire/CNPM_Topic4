@@ -265,27 +265,27 @@ type LocationUpdateResult = {
 };
 ```
 
-- [ ] **Step 1: Write pure geo tests**
+- [x] **Step 1: Write pure geo tests**
 
   Pin WGS84 distance around known points, future/stale timestamp limits, maximum accuracy, minimum movement, and speed greater than 55 m/s. Include longitude/latitude reversal as a failing input.
 
-- [ ] **Step 2: Write service tests**
+- [x] **Step 2: Write service tests**
 
   Assert only the authenticated driver can update their row; stale/future/inaccurate/implausibly fast points are rejected; updates inside 5 seconds and under 15 m are ignored; a 60-second stationary heartbeat is accepted; server receipt time and device capture time remain distinct.
 
-- [ ] **Step 3: Add location metadata safely**
+- [x] **Step 3: Add location metadata safely**
 
   Add nullable `locationAccuracyM` and `locationCapturedAt`; retain `lastLocationAt` as server receipt time. Existing drivers remain valid but cannot pass geofence until they submit a fresh accurate point.
 
-- [ ] **Step 4: Implement one locked update**
+- [x] **Step 4: Implement one locked update**
 
   Lock the driver row, query prior geometry, validate, then update geometry and metadata. A normal client update inside the 5-second/15-metre window returns `200` with `accepted: false`; reserve `429` for repeated requests that exceed the controller's abuse-rate limit. Return `400` for invalid/stale location; do not trust client speed or overwrite a newer capture with an older one.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
   Run geo/dispatch tests and the GPS integration cases. Expected: all pass.
 
-- [ ] **Checkpoint:** `feat(gps): validate driver location updates`
+- [x] **Checkpoint:** `feat(gps): validate driver location updates`
 
 ### Task 5: Make backend navigation phase-aware and geofence-protected
 
