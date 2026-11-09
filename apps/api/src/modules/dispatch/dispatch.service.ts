@@ -11,7 +11,6 @@ import { DriverStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
 import { DriverLocationDto } from "../../common/dto";
-import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { evaluateDriverGps } from "../../common/geo";
 
@@ -204,50 +203,10 @@ export class DispatchService {
       },
       orderBy: { assignedAt: "asc" },
     });
-    if (!tasks.length) return tasks;
-
-    // Prisma cannot materialize the PostGIS geography column, so fetch only the
-    // coordinates needed to produce stable Google Maps navigation links.
-    const ids = tasks.map((task) => task.shipmentId);
-    const points = await this.db.$queryRaw<
-      Array<{
-        shipmentId: string;
-        pickupLat: number;
-        pickupLng: number;
-        dropoffLat: number;
-        dropoffLng: number;
-      }>
-    >`
-      SELECT
-        s.id::text AS "shipmentId",
-        ST_Y(p.location::geometry)::double precision AS "pickupLat",
-        ST_X(p.location::geometry)::double precision AS "pickupLng",
-        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
-        ST_X(d.location::geometry)::double precision AS "dropoffLng"
-      FROM "Shipment" s
-      JOIN "Address" p ON p.id = s."pickupAddressId"
-      JOIN "Address" d ON d.id = s."dropoffAddressId"
-      WHERE s.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
-    `;
-    const byShipment = new Map(points.map((point) => [point.shipmentId, point]));
-    return tasks.map((task) => {
-      const point = byShipment.get(task.shipmentId);
-      return {
-        ...task,
-        navigationUrls: point
-          ? {
-              pickup: buildGoogleMapsDirectionsUrl({
-                lat: point.pickupLat,
-                lng: point.pickupLng,
-              }),
-              dropoff: buildGoogleMapsDirectionsUrl({
-                lat: point.dropoffLat,
-                lng: point.dropoffLng,
-              }),
-            }
-          : null,
-      };
-    });
+    return tasks.map((task) => ({
+      ...task,
+      navigationUrls: null,
+    }));
   }
   async location(
     actor: Actor,

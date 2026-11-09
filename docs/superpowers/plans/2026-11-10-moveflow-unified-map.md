@@ -634,35 +634,35 @@ GET /api/v1/shipments/:id/live
 - Consumes: all completed map, routing, GPS, state, geocoding, and infrastructure tasks.
 - Produces: current OpenAPI, operator/user guides, measured verification evidence, and zero legacy commercial map runtime dependencies.
 
-- [ ] **Step 1: Add security headers and proxy correctness**
+- [x] **Step 1: Add security headers and proxy correctness**
 
   Configure a CSP that permits self-hosted scripts/styles/Web Workers/WebGL assets and same-origin API/maps only. Configure Nest proxy trust for the known Nginx hop so throttling uses the client IP; test direct and proxied behavior.
 
-- [ ] **Step 2: Add browser acceptance tests**
+- [x] **Step 2: Add browser acceptance tests**
 
   Cover sender A/B/search/drag/quote/create; driver GPS→A→B; sender authorized live tracking; denied GPS; stale GPS; no route; OSRM/geocoder timeout; logout cleanup; mobile/desktop layouts; and direct API attempts to skip states.
 
-- [ ] **Step 3: Measure request/render/memory behavior**
+- [x] **Step 3: Measure request/render/memory behavior**
 
   Record before/after browser performance evidence: map initialization time, route request count during 5 minutes stationary and moving, tile requests after marker updates, detached map/DOM nodes after 20 mount/destroy cycles, and heap trend. Pass criteria: marker/GPS updates do not reload base tiles, stationary driver sends at most the 60-second heartbeat, reroutes respect 20 seconds, and no active watcher/poll survives destruction.
 
-- [ ] **Step 4: Regenerate and diff OpenAPI**
+- [x] **Step 4: Regenerate and diff OpenAPI**
 
   Export `docs/api/openapi.json`; assert geocoding, navigation, live tracking, GPS metadata, new states, route geometry, distance, and duration are present. Add a CI check that fails when generated contract differs.
 
-- [ ] **Step 5: Run full gates**
+- [x] **Step 5: Run full gates**
 
   Run `node --check` for frontend modules, `npm run test:web`, `npm run typecheck`, `npm run lint`, unit tests, integration tests on an isolated test database, `npm run build`, `npm audit`, Docker image build, Compose config, and the small-fixture map smoke flow. Record exact PASS/FAIL/NOT TESTED; do not hide pre-existing or environment failures.
 
-- [ ] **Step 6: Run removal audit**
+- [x] **Step 6: Run removal audit**
 
   Whole-repo grep must find no runtime Leaflet, Esri, Google Maps navigation, Google Routes, public OSRM demo default, dead map button, parallel distance calculator, or commercial API key requirement. Documentation may mention removed behavior only in migration notes.
 
-- [ ] **Step 7: Final documentation and handoff**
+- [x] **Step 7: Final documentation and handoff**
 
   Document changed files, verified behaviors, profile limitations, map data date/region, ODbL/attribution duties, hardware costs as measured/unknown rather than guessed, operational update steps, and every remaining NOT TESTED item.
 
-- [ ] **Checkpoint:** `docs(map): publish verified unified map operations`
+- [x] **Checkpoint:** `docs(map): publish verified unified map operations`
 
 ---
 

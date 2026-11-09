@@ -13,7 +13,6 @@ import { Actor } from "../../common/security";
 import { AddressDto, BookingDto, ShipmentPageDto } from "../../common/dto";
 import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
-import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
 import { evaluateGeofenceArrival } from "../../common/geo";
 import { RoutingService, RouteResult } from "../pricing/routing.service";
 
@@ -166,38 +165,9 @@ export class ShipmentsService {
       });
       if (!assignment) throw new ForbiddenException();
     }
-    const locations = await this.db.$queryRaw<
-      Array<{
-        pickupLat: number;
-        pickupLng: number;
-        dropoffLat: number;
-        dropoffLng: number;
-      }>
-    >`
-      SELECT
-        ST_Y(p.location::geometry)::double precision AS "pickupLat",
-        ST_X(p.location::geometry)::double precision AS "pickupLng",
-        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
-        ST_X(d.location::geometry)::double precision AS "dropoffLng"
-      FROM "Address" p
-      JOIN "Address" d ON d.id = ${shipment.dropoffAddressId}::uuid
-      WHERE p.id = ${shipment.pickupAddressId}::uuid
-    `;
-    const coordinates = locations[0];
     return {
       ...shipment,
-      navigationUrls: actor.role === "DRIVER" && coordinates
-        ? {
-            pickup: buildGoogleMapsDirectionsUrl({
-              lat: coordinates.pickupLat,
-              lng: coordinates.pickupLng,
-            }),
-            dropoff: buildGoogleMapsDirectionsUrl({
-              lat: coordinates.dropoffLat,
-              lng: coordinates.dropoffLng,
-            }),
-          }
-        : null,
+      navigationUrls: null,
     };
   }
   async tracking(code: string) {

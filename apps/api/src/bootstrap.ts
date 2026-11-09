@@ -5,6 +5,14 @@ import { addResponseContracts } from "./common/openapi-responses";
 import { DecimalInterceptor } from "./common/serialization";
 import { ErrorFilter } from "./common/errors";
 export function configure(app: INestApplication) {
+  try {
+    const expressApp = app.getHttpAdapter().getInstance();
+    if (expressApp && typeof expressApp.set === "function") {
+      expressApp.set("trust proxy", 1);
+    }
+  } catch {
+    // Adapter may differ in non-express test harnesses
+  }
   app.setGlobalPrefix("api/v1");
   app.use(helmet());
   app.enableCors({

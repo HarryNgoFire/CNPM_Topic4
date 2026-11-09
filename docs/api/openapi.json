@@ -204,6 +204,202 @@
         "security": []
       }
     },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "operationId": "AuthController_verifyEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": []
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "operationId": "AuthController_resend",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "security": []
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -516,6 +712,603 @@
           "Auth"
         ],
         "security": []
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "operationId": "UsersController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/me/password": {
+      "patch": {
+        "operationId": "UsersController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "UsersController_listUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_createManaged",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManagedUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}/active": {
+      "patch": {
+        "operationId": "UsersController_setActive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/api/v1/pricing/quote": {
@@ -1282,7 +2075,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PointDto"
+                "$ref": "#/components/schemas/DriverLocationDto"
               }
             }
           }
@@ -1295,6 +2088,16 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "TOO_SOON",
+                        "STATIONARY"
+                      ]
+                    },
                     "lat": {
                       "type": "number",
                       "minimum": -90,
@@ -1304,11 +2107,23 @@
                       "type": "number",
                       "minimum": -180,
                       "maximum": 180
+                    },
+                    "capturedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "receivedAt": {
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
+                    "accepted",
+                    "reason",
                     "lat",
-                    "lng"
+                    "lng",
+                    "capturedAt",
+                    "receivedAt"
                   ]
                 }
               }
@@ -1877,9 +2692,14 @@
               "type": "string",
               "enum": [
                 "RECEIVED",
+                "EN_ROUTE_PICKUP",
+                "ARRIVED_PICKUP",
                 "IN_TRANSIT",
                 "OUT_FOR_DELIVERY",
-                "DELIVERED"
+                "ARRIVED_DROPOFF",
+                "DELIVERED",
+                "CANCELLED",
+                "DELIVERY_FAILED"
               ]
             }
           }
@@ -1999,6 +2819,216 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ShipmentDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Shipments"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}/navigation": {
+      "get": {
+        "operationId": "ShipmentsController_navigation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Shipments"
+        ]
+      }
+    },
+    "/api/v1/shipments/{id}/live": {
+      "get": {
+        "operationId": "ShipmentsController_live",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveTrackingResponse"
                 }
               }
             }
@@ -2299,11 +3329,247 @@
         ],
         "security": []
       }
+    },
+    "/api/v1/geocoding/search": {
+      "get": {
+        "operationId": "GeocodingController_search",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Search query",
+            "schema": {
+              "minLength": 3,
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Result limit (1..5)",
+            "schema": {
+              "default": 5,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GeocodedAddress"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ]
+      }
+    },
+    "/api/v1/geocoding/reverse": {
+      "get": {
+        "operationId": "GeocodingController_reverse",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": 10.754,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lng",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": 106.663,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodedAddress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role or ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Business rule conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ]
+      }
     }
   },
   "info": {
     "title": "Topic 4 M2 API",
-    "description": "Pricing, booking, dispatch, tracking and webhook API. Auth and schema baseline require M3 integration review.",
+    "description": "MoveFlow last-mile delivery API with email verification, pricing, booking, dispatch, tracking, account security and webhooks.",
     "version": "1.0.0",
     "contact": {}
   },
@@ -2329,21 +3595,43 @@
           },
           "password": {
             "type": "string",
-            "minLength": 10
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "SENDER",
-              "DRIVER"
-            ]
+            "minLength": 10,
+            "maxLength": 72
           }
         },
         "required": [
           "email",
           "name",
-          "password",
-          "role"
+          "password"
+        ]
+      },
+      "VerifyEmailDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6,
+            "example": "123456"
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ]
+      },
+      "ResendVerificationDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
         ]
       },
       "LoginDto": {
@@ -2370,6 +3658,74 @@
         },
         "required": [
           "refreshToken"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "CreateManagedUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 72
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "DRIVER",
+              "DISPATCHER"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password",
+          "role"
+        ]
+      },
+      "SetUserActiveDto": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active"
         ]
       },
       "AddressDto": {
@@ -2511,7 +3867,7 @@
           "action"
         ]
       },
-      "PointDto": {
+      "DriverLocationDto": {
         "type": "object",
         "properties": {
           "lat": {
@@ -2521,6 +3877,16 @@
           "lng": {
             "type": "number",
             "example": 106.663
+          },
+          "accuracyM": {
+            "type": "number",
+            "example": 10.5,
+            "description": "Accuracy in meters (max 200)"
+          },
+          "capturedAt": {
+            "type": "string",
+            "example": "2026-11-10T02:00:00.000Z",
+            "description": "ISO 8601 capture timestamp"
           }
         },
         "required": [
@@ -2571,10 +3937,19 @@
             "type": "string",
             "enum": [
               "RECEIVED",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "IN_TRANSIT",
               "OUT_FOR_DELIVERY",
-              "DELIVERED"
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "CANCELLED",
+              "DELIVERY_FAILED"
             ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Required for CANCELLED and DELIVERY_FAILED; 1-255 characters"
           }
         },
         "required": [
@@ -2626,6 +4001,51 @@
             "type": "number",
             "minimum": 0
           },
+          "distanceMeters": {
+            "type": "number",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": "integer"
+          },
+          "geometry": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "LineString"
+              },
+              "coordinates": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            },
+            "required": [
+              "type",
+              "coordinates"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "const": "OSRM"
+          },
+          "profile": {
+            "type": "string",
+            "const": "driving"
+          },
+          "distanceSource": {
+            "type": "string",
+            "enum": [
+              "OSRM_DRIVING"
+            ]
+          },
           "baseFee": {
             "type": "number",
             "minimum": 0
@@ -2645,15 +4065,6 @@
           "fee": {
             "type": "number",
             "minimum": 0
-          },
-          "distanceSource": {
-            "type": "string",
-            "enum": [
-              "OSRM_DRIVING",
-              "GOOGLE_ROUTES_TWO_WHEELER",
-              "GOOGLE_ROUTES_DRIVE",
-              "POSTGIS_GEODESIC_FALLBACK"
-            ]
           }
         },
         "required": [
@@ -2661,6 +4072,11 @@
           "ruleId",
           "ruleVersion",
           "distanceKm",
+          "distanceMeters",
+          "durationSeconds",
+          "geometry",
+          "source",
+          "profile",
           "distanceSource",
           "baseFee",
           "distanceFee",
@@ -2695,9 +4111,14 @@
             "type": "string",
             "enum": [
               "RECEIVED",
-              "IN_TRANSIT",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "OUT_FOR_DELIVERY",
-              "DELIVERED"
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
             ]
           },
           "serviceType": {
@@ -2744,9 +4165,14 @@
             "type": "string",
             "enum": [
               "RECEIVED",
-              "IN_TRANSIT",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "OUT_FOR_DELIVERY",
-              "DELIVERED"
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
             ]
           },
           "occurredAt": {
@@ -2769,9 +4195,14 @@
             "type": "string",
             "enum": [
               "RECEIVED",
-              "IN_TRANSIT",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "OUT_FOR_DELIVERY",
-              "DELIVERED"
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
             ]
           },
           "createdAt": {
@@ -3060,9 +4491,14 @@
                 ],
                 "enum": [
                   "RECEIVED",
-                  "IN_TRANSIT",
+                  "EN_ROUTE_PICKUP",
+                  "ARRIVED_PICKUP",
                   "OUT_FOR_DELIVERY",
+                  "ARRIVED_DROPOFF",
                   "DELIVERED",
+                  "IN_TRANSIT",
+                  "CANCELLED",
+                  "DELIVERY_FAILED",
                   null
                 ]
               },
@@ -3070,9 +4506,14 @@
                 "type": "string",
                 "enum": [
                   "RECEIVED",
-                  "IN_TRANSIT",
+                  "EN_ROUTE_PICKUP",
+                  "ARRIVED_PICKUP",
                   "OUT_FOR_DELIVERY",
-                  "DELIVERED"
+                  "ARRIVED_DROPOFF",
+                  "DELIVERED",
+                  "IN_TRANSIT",
+                  "CANCELLED",
+                  "DELIVERY_FAILED"
                 ]
               }
             },
@@ -3234,6 +4675,57 @@
           "role"
         ]
       },
+      "GeocodedAddress": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "string"
+              },
+              "ward": {
+                "type": "string"
+              },
+              "district": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "line",
+              "ward",
+              "district",
+              "city"
+            ]
+          },
+          "attribution": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "lat",
+          "lng",
+          "address",
+          "attribution"
+        ]
+      },
       "AddressResponse": {
         "type": "object",
         "properties": {
@@ -3317,9 +4809,14 @@
             ],
             "enum": [
               "RECEIVED",
-              "IN_TRANSIT",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "OUT_FOR_DELIVERY",
+              "ARRIVED_DROPOFF",
               "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED",
               null
             ]
           },
@@ -3327,9 +4824,14 @@
             "type": "string",
             "enum": [
               "RECEIVED",
-              "IN_TRANSIT",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
               "OUT_FOR_DELIVERY",
-              "DELIVERED"
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
             ]
           },
           "changedBy": {
@@ -3348,6 +4850,23 @@
           "toStatus",
           "changedBy",
           "occurredAt"
+        ]
+      },
+      "NavigationUrls": {
+        "type": "object",
+        "properties": {
+          "pickup": {
+            "type": "string",
+            "format": "uri"
+          },
+          "dropoff": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "pickup",
+          "dropoff"
         ]
       },
       "ShipmentDetailResponse": {
@@ -3467,21 +4986,281 @@
           }
         ]
       },
-      "NavigationUrls": {
+      "NavigationResponse": {
         "type": "object",
         "properties": {
-          "pickup": {
+          "shipmentId": {
             "type": "string",
-            "format": "uri"
+            "format": "uuid"
           },
-          "dropoff": {
+          "shipmentStatus": {
             "type": "string",
-            "format": "uri"
+            "enum": [
+              "RECEIVED",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
+              "OUT_FOR_DELIVERY",
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "TO_PICKUP",
+              "AT_PICKUP",
+              "TO_DROPOFF",
+              "AT_DROPOFF",
+              "COMPLETE"
+            ]
+          },
+          "currentLocation": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "accuracyM": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "capturedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "lat",
+                  "lng",
+                  "accuracyM",
+                  "capturedAt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "destination": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PICKUP",
+                      "DROPOFF"
+                    ]
+                  },
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                },
+                "required": [
+                  "kind",
+                  "lat",
+                  "lng"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "route": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "distanceMeters": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "distanceKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "durationSeconds": {
+                    "type": "integer"
+                  },
+                  "geometry": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "LineString"
+                      },
+                      "coordinates": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "coordinates"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "OSRM"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "const": "driving"
+                  }
+                },
+                "required": [
+                  "distanceMeters",
+                  "distanceKm",
+                  "durationSeconds",
+                  "geometry",
+                  "source",
+                  "profile"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "arrival": {
+            "type": "object",
+            "properties": {
+              "eligible": {
+                "type": "boolean"
+              },
+              "distanceM": {
+                "oneOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "eligible",
+              "distanceM"
+            ]
           }
         },
         "required": [
-          "pickup",
-          "dropoff"
+          "shipmentId",
+          "shipmentStatus",
+          "phase",
+          "currentLocation",
+          "destination",
+          "route",
+          "arrival"
+        ]
+      },
+      "LiveTrackingResponse": {
+        "type": "object",
+        "properties": {
+          "shipmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "EN_ROUTE_PICKUP",
+              "ARRIVED_PICKUP",
+              "OUT_FOR_DELIVERY",
+              "ARRIVED_DROPOFF",
+              "DELIVERED",
+              "IN_TRANSIT",
+              "CANCELLED",
+              "DELIVERY_FAILED"
+            ]
+          },
+          "driver": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "accuracyM": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "capturedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "lat",
+                  "lng",
+                  "accuracyM",
+                  "capturedAt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastUpdatedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "shipmentId",
+          "status",
+          "driver",
+          "lastUpdatedAt"
         ]
       }
     }

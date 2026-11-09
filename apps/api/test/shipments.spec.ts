@@ -239,7 +239,7 @@ describe("Shipment state machine and ownership", () => {
     expect(
       await service.get("ship", { sub: "sender", role: "SENDER" }),
     ).toMatchObject({ ...shipment, navigationUrls: null }));
-  it("adds pickup and dropoff Google Maps navigation URLs", async () => {
+  it("keeps navigationUrls null as in-app navigation endpoint is used", async () => {
     db.shipment.findUnique.mockResolvedValue({
       ...shipment,
       pickupAddressId: "pickup-id",
@@ -256,11 +256,7 @@ describe("Shipment state machine and ownership", () => {
     ]);
 
     const result = await service.get("ship", actor);
-    const pickupUrl = new URL(result.navigationUrls!.pickup);
-    const dropoffUrl = new URL(result.navigationUrls!.dropoff);
-    expect(pickupUrl.searchParams.get("destination")).toBe("10.754,106.663");
-    expect(dropoffUrl.searchParams.get("destination")).toBe("10.772,106.698");
-    expect(pickupUrl.searchParams.get("travelmode")).toBe("two-wheeler");
+    expect(result.navigationUrls).toBeNull();
   });
   it("scopes shipment list by sender", async () => {
     await service.list(
