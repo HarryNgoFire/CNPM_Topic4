@@ -177,6 +177,18 @@ export function addResponseContracts(doc: OpenAPIObject) {
         enum: ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"],
       },
     }),
+    GeocodedAddress: object({
+      label: text,
+      lat: { type: "number", minimum: -90, maximum: 90 },
+      lng: { type: "number", minimum: -180, maximum: 180 },
+      address: object({
+        line: text,
+        ward: text,
+        district: text,
+        city: text,
+      }),
+      attribution: text,
+    }),
   };
   schemas.AddressResponse = object({
     id: uuid,
@@ -314,6 +326,8 @@ export function addResponseContracts(doc: OpenAPIObject) {
   doc.components.schemas = { ...doc.components.schemas, ...schemas };
   const contracts: Record<string, any> = {
     "POST /api/v1/pricing/quote": ref("FeeQuoteResponse"),
+    "GET /api/v1/geocoding/search": array("GeocodedAddress"),
+    "GET /api/v1/geocoding/reverse": ref("GeocodedAddress"),
     "POST /api/v1/shipments": ref("ShipmentResponse"),
     "GET /api/v1/shipments": array("ShipmentResponse"),
     "GET /api/v1/shipments/{id}": ref("ShipmentDetailResponse"),

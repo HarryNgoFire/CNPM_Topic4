@@ -365,23 +365,23 @@ GET /api/v1/geocoding/search?q=<3..200 chars>&limit=<1..5>
 GET /api/v1/geocoding/reverse?lat=<lat>&lng=<lng>
 ```
 
-- [ ] **Step 1: Write normalization tests**
+- [x] **Step 1: Write normalization tests**
 
   Cover Vietnamese `house_number + road`, ward from `quarter/suburb/neighbourhood`, district from `city_district/county`, city from `city/town/state`, missing optional components, malformed coordinates, and Nominatim no-result responses.
 
-- [ ] **Step 2: Write upstream failure/cache tests**
+- [x] **Step 2: Write upstream failure/cache tests**
 
   Cover 5-second timeout, invalid JSON, 429/5xx, 24-hour exact-query cache, max 1,000 entries, URL encoding, result limit 5, `countrycodes=vn`, and `Accept-Language=vi`.
 
-- [ ] **Step 3: Implement the proxy**
+- [x] **Step 3: Implement the proxy**
 
   Use `GEOCODER_BASE_URL` with no public default in production; never expose upstream debug output. Apply auth plus endpoint throttle. Return explicit 503 when unconfigured/unavailable; manual map pinning remains usable.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
   Run geocoding tests, typecheck, lint, and baseline tests. Expected: all pass.
 
-- [ ] **Checkpoint:** `feat(map): add self-hosted geocoding API`
+- [x] **Checkpoint:** `feat(map): add self-hosted geocoding API`
 
 ### Task 7: Introduce the reusable MapLibre engine
 

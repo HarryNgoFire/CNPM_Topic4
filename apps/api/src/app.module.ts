@@ -11,6 +11,7 @@ import { ShipmentsModule } from "./modules/shipments/shipments.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthController } from "./modules/health/health.controller";
 import { UsersModule } from "./modules/users/users.module";
+import { GeocodingModule } from "./modules/geocoding/geocoding.module";
 @Module({
   imports: [
     DatabaseModule,
@@ -22,6 +23,7 @@ import { UsersModule } from "./modules/users/users.module";
     DispatchModule,
     WebhooksModule,
     ShipmentsModule,
+    GeocodingModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -235,3 +235,33 @@ export class AssignDto {
   @IsUUID("4")
   driverId?: string;
 }
+
+export class GeocodingSearchDto {
+  @ApiProperty({ description: "Search query", minLength: 3, maxLength: 200 })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(200)
+  q!: string;
+
+  @ApiPropertyOptional({ description: "Result limit (1..5)", default: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  limit: number = 5;
+}
+
+export class GeocodingReverseDto {
+  @ApiProperty({ example: 10.754 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 106.663 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  lng!: number;
+}
