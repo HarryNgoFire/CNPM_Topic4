@@ -59,7 +59,7 @@ Trên PowerShell có thể dùng `Copy-Item .env.example .env`. Sửa `.env` tr�
 | POSTGRES_PASSWORD | Mật khẩu local mới; dùng hex hoặc chữ/số để tránh lỗi URL encoding |
 | DATABASE_URL | `postgresql://topic4:<mật khẩu trên>@localhost:5432/topic4` cho npm trên máy |
 | JWT_SECRET | Chuỗi ngẫu nhiên ít nhất 32 ký tự, thay giá trị mẫu |
-| DEMO_PASSWORD | 10 ký tự trở lên, không quá 72 byte UTF-8 |
+| DEMO_PASSWORD | Mật khẩu demo local; mặc định `admin`, không quá 72 byte UTF-8 |
 | WEBHOOK_RECEIVER_SECRET | Secret ngẫu nhiên ít nhất 32 ký tự, dùng cùng secret khi đăng ký subscription |
 | WEBHOOK_ALLOWED_ORIGINS | `http://receiver:4000` cho Compose |
 | WEBHOOK_ALLOW_HTTP | `true` chỉ cho demo local; dùng HTTPS ở deployment thật |

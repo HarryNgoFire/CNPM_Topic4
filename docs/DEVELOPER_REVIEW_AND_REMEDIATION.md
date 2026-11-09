@@ -14,7 +14,7 @@
 
 - OSRM public demo chỉ phù hợp demo học tập; production nên tự host hoặc dùng routing provider có SLA và thỏa thuận quota.
 - OSRM driving profile không phải routing xe máy chuyên biệt; giá và tuyến có thể khác Google Maps.
-- Giao diện nhập tọa độ thủ công, chưa geocode tự động.
+- Người gửi ghim thủ công cả điểm lấy và điểm giao; OSRM tính quãng đường đường bộ theo hai tọa độ đó.
 - Không có MFA yêu cầu OTP ở mọi lần đăng nhập; OTP hiện dùng để xác minh email lần đầu.
 - Admin đầu tiên được khởi tạo qua seed. Cần quy trình bootstrap quản trị an toàn (không dùng demo password) trước khi triển khai thực.
 - Chưa có reset password qua email, kiểm thử E2E qua trình duyệt, giám sát/alert, backup tự động hoặc external secrets manager.

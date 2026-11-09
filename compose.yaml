@@ -40,7 +40,7 @@ services:
       retries: 10
   web:
     image: nginx:1.27-alpine
-    ports: ["3000:80"]
+    ports: ["3005:80"]
     volumes:
       - ./apps/web:/usr/share/nginx/html:ro
       - ./apps/web/nginx.conf:/etc/nginx/conf.d/default.conf:ro

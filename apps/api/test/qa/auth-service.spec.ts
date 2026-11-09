@@ -122,12 +122,12 @@ describe("QA: AuthService (unit, mocked DB)", () => {
     it("issues tokens and stores only the SHA-256 hash of the refresh token", async () => {
       db.user.findUnique.mockResolvedValueOnce(activeUser());
       const result = await service.login({
-        email: "Sender@Demo.Local",
+        email: "Sender@Gmail.com",
         password: PASSWORD,
       } as any);
 
       expect(db.user.findUnique).toHaveBeenCalledWith({
-        where: { email: "sender@demo.local" },
+        where: { email: "sender@gmail.com" },
       });
       expect(jwt.signAsync).toHaveBeenCalledWith({ sub: "u1", role: "SENDER" });
       expect(result.accessToken).toBe("signed.jwt.token");

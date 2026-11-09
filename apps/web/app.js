@@ -2,7 +2,7 @@
 (() => {
   const API_BASE = window.MOVEFLOW_API_BASE || `${location.origin}/api/v1`;
   const root = document.getElementById("app");
-  const state = { token: null, refreshToken: null, user: null, view: "dashboard", authMode: "login", pendingEmail: "", lastShipments: [], lastQueue: [], lastUsers: [], lastPricing: [], quote: null, detail: null };
+  const state = { token: null, refreshToken: null, user: null, view: "dashboard", authMode: "login", pendingEmail: "", lastShipments: [], lastQueue: [], lastUsers: [], lastPricing: [], quote: null, detail: null, taskRefreshTimer: null, taskRefreshPending: false };
   const STATUS = { RECEIVED: ["Đã tiếp nhận", "blue"], IN_TRANSIT: ["Đang vận chuyển", "warning"], OUT_FOR_DELIVERY: ["Đang giao hàng", "warning"], DELIVERED: ["Đã giao", "success"], PENDING: ["Chờ phản hồi", "blue"], ACCEPTED: ["Đã nhận đơn", "success"], REJECTED: ["Đã từ chối", "danger"], EXPIRED: ["Hết thời hạn", "neutral"], COMPLETED: ["Hoàn tất", "success"] };
   const TITLES = { dashboard: "Tổng quan", shipments: "Quản lý đơn hàng", new: "Tạo đơn giao hàng", tracking: "Tra cứu đơn hàng", tasks: "Công việc tài xế", users: "Quản lý tài khoản", pricing: "Bảng giá dịch vụ", profile: "Tài khoản của tôi", details: "Chi tiết đơn hàng" };
   const fmtMoney = n => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -47,7 +47,7 @@
   const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body) });
   const patch = (path, body) => api(path, { method: "PATCH", body: JSON.stringify(body) });
   const get = path => api(path, { method: "GET" });
-  const nav = view => { state.view = view; state.detail = null; document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view)); renderView(); document.querySelector(".sidebar")?.classList.remove("open"); };
+  const nav = view => { if (view !== "tasks" && state.taskRefreshTimer) { clearInterval(state.taskRefreshTimer); state.taskRefreshTimer = null; } state.view = view; state.detail = null; document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view)); renderView(); document.querySelector(".sidebar")?.classList.remove("open"); };
 
   function renderAuth(mode = "login", notice = "") {
     state.authMode = mode; root.innerHTML = `
@@ -70,7 +70,7 @@
     root.querySelector("#resend-code")?.addEventListener("click", resendCode);
     root.querySelector("#back-login")?.addEventListener("click", () => renderAuth("login"));
   }
-  function authLogin() { return `<div class="seg-tabs"><button class="active" type="button" data-auth-mode="login">Đăng nhập</button><button type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Chào mừng trở lại</h2><p class="subhead">Đăng nhập để quản lý đơn hàng và hành trình giao nhận của bạn.</p><form id="auth-form"><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="10" required></div><button class="btn btn-primary btn-block" type="submit">Đăng nhập <span>→</span></button></form><div class="notice info">Tài khoản phải xác minh email bằng mã OTP trước khi được đăng nhập lần đầu.</div>`; }
+  function authLogin() { return `<div class="seg-tabs"><button class="active" type="button" data-auth-mode="login">Đăng nhập</button><button type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Chào mừng trở lại</h2><p class="subhead">Đăng nhập để quản lý đơn hàng và hành trình giao nhận của bạn.</p><form id="auth-form"><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="72" required></div><button class="btn btn-primary btn-block" type="submit">Đăng nhập <span>→</span></button></form><div class="notice info">Tài khoản phải xác minh email bằng mã OTP trước khi được đăng nhập lần đầu.</div>`; }
   function authRegister() { return `<div class="seg-tabs"><button type="button" data-auth-mode="login">Đăng nhập</button><button class="active" type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Tạo tài khoản mới</h2><p class="subhead">Dùng Gmail cá nhân hoặc email bạn có quyền truy cập. Mã xác minh sẽ được gửi đến địa chỉ này.</p><form id="auth-form"><div class="field"><label for="name">Họ và tên</label><input id="name" name="name" autocomplete="name" placeholder="Nguyễn Minh Anh" minlength="2" maxlength="100" required></div><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Tạo mật khẩu</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="Ít nhất 10 ký tự" required><small>Dùng mật khẩu riêng, dài ít nhất 10 ký tự; không dùng lại mật khẩu email.</small></div><button class="btn btn-primary btn-block" type="submit">Tạo tài khoản & gửi mã <span>→</span></button></form><div class="notice info">Để bảo vệ hệ thống, đăng ký công khai chỉ tạo tài khoản khách hàng. Tài khoản tài xế và quản lý do quản trị viên cấp.</div>`; }
   function authVerify() { return `<h2>Xác minh email</h2><p class="subhead">Nhập mã 6 chữ số đã gửi đến <b>${esc(state.pendingEmail)}</b>. Mã hết hạn sau 10 phút.</p><form id="auth-form"><div class="field"><label for="code">Mã xác thực OTP</label><input class="code-input" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div><button class="btn btn-primary btn-block" type="submit">Xác minh tài khoản <span>→</span></button></form><div style="display:flex;justify-content:space-between;align-items:center;margin-top:15px"><button class="text-action" type="button" id="resend-code">Gửi lại mã</button><button class="text-action" type="button" id="back-login">Quay lại đăng nhập</button></div><div class="notice info">Không chia sẻ mã OTP cho bất kỳ ai. Nếu không thấy email, hãy kiểm tra thư mục Spam/Quảng cáo.</div>`; }
   async function submitAuth(event) {
@@ -149,11 +149,11 @@
     const filter = () => { const search = (target.querySelector("#shipment-search")?.value || "").toLowerCase(); const status = target.querySelector("#shipment-filter")?.value || ""; const filtered = items.filter(x => String(x.trackingCode || x.id).toLowerCase().includes(search) && (!status || x.status === status)); target.querySelector("#shipment-table").innerHTML = shipmentTable(filtered); bindViewButtons(target); };
     target.querySelector("#shipment-search")?.addEventListener("input", filter); target.querySelector("#shipment-filter")?.addEventListener("change", filter); bindViewButtons(target);
   }
-  // Coordinates are never guessed from text or prefilled with unrelated landmarks.
-  function addressFields(prefix, title) { 
+  function addressFields(prefix, title) {
+    const pickup = prefix === "pickup";
     return `<div class="form-section">
       <h3>${title}</h3>
-      <p>Nhập thông tin địa chỉ, sau đó bấm <b>Chọn vị trí trên bản đồ</b> và nhấp chính xác vị trí giao nhận.</p>
+      <p>${pickup ? "Nhập địa chỉ, sau đó ghim chính xác điểm lấy hàng trên bản đồ." : "Nhập địa chỉ, sau đó ghim chính xác điểm giao hàng trên bản đồ."}</p>
       <div class="field">
         <label>Số nhà, tên đường</label>
         <input name="${prefix}Line" maxlength="255" placeholder="Số nhà, tên đường" required>
@@ -174,16 +174,16 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Vĩ độ</label>
+          <label>Vĩ độ ${pickup ? "điểm lấy" : "điểm giao"}</label>
           <input name="${prefix}Lat" type="number" step="any" min="-90" max="90" placeholder="Chọn trên bản đồ" readonly required>
         </div>
         <div class="field">
-          <label>Kinh độ</label>
+          <label>Kinh độ ${pickup ? "điểm lấy" : "điểm giao"}</label>
           <input name="${prefix}Lng" type="number" step="any" min="-180" max="180" placeholder="Chọn trên bản đồ" readonly required>
         </div>
       </div>
-      <button type="button" class="btn btn-outline btn-sm" data-action="pick-address-map" data-prefix="${prefix}">⌖ Chọn vị trí trên Bản đồ</button>
-      <p class="small-muted">Địa chỉ và tọa độ phải trùng nhau. Hãy kiểm tra ghim trước khi tạo đơn.</p>
+      <button type="button" class="btn btn-outline btn-sm" data-action="pick-address-map" data-prefix="${prefix}">⌖ Ghim ${pickup ? "điểm lấy" : "điểm giao"} trên bản đồ</button>
+      <p class="small-muted">Kiểm tra ghim ${pickup ? "điểm lấy" : "điểm giao"} trùng với địa chỉ trước khi tiếp tục.</p>
     </div>`; 
   }
   let pickerMap = null;
@@ -266,17 +266,61 @@
   function renderNewShipment(target) {
     state.quote = null;
     target.innerHTML = `${welcome("Tạo đơn giao hàng", "Tạo yêu cầu giao nhận mới. Phí được ước tính theo quãng đường từ dịch vụ định tuyến.")}<form id="shipment-form"><section class="panel"><div class="grid form-grid">${addressFields("pickup", "01 · Điểm lấy hàng")}${addressFields("dropoff", "02 · Điểm giao hàng")}</div><div class="form-section"><h3>03 · Thông tin kiện hàng</h3><p>Thông tin này dùng để tính phụ phí khối lượng theo bảng giá hiện tại.</p><div class="grid form-grid"><div class="field"><label>Khối lượng (kg)</label><input name="weightKg" type="number" min="0.01" max="9999" step="0.01" value="1" required></div><div class="field"><label>Loại dịch vụ</label><select name="serviceType"><option value="STANDARD">Tiêu chuẩn</option><option value="EXPRESS">Hỏa tốc</option></select></div><div class="field"><label>Dài (cm)</label><input name="lengthCm" type="number" min="0.01" step="0.01" value="20" required></div><div class="field"><label>Rộng (cm)</label><input name="widthCm" type="number" min="0.01" step="0.01" value="15" required></div><div class="field"><label>Cao (cm)</label><input name="heightCm" type="number" min="0.01" step="0.01" value="10" required></div></div></div><div id="quote-result"></div><div class="form-actions"><button class="btn btn-outline" type="button" id="quote-button">Tính phí dự kiến</button><button class="btn btn-primary" type="submit">Tạo đơn giao hàng →</button></div><p class="small-muted">Quãng đường OSRM dùng profile driving; tuyến xe máy Google Maps có thể khác. Phí cuối cùng sẽ được lưu theo báo giá backend.</p></section></form>`;
-    const form = target.querySelector("#shipment-form"); form.addEventListener("input", e => { state.quote = null; target.querySelector("#quote-result").innerHTML = ""; const match = e.target?.name?.match(/^(pickup|dropoff)(Line|Ward|District|City)$/); if (match) { for (const suffix of ["Lat", "Lng"]) form.querySelector(`[name="${match[1]}${suffix}"]`).value = ""; } });
-    target.querySelector("#quote-button").addEventListener("click", async () => { try { const body = bookingPayload(new FormData(form)); const quote = await post("/pricing/quote", body); state.quote = quote; target.querySelector("#quote-result").innerHTML = `<div class="quote-box"><div><small>PHÍ GIAO HÀNG DỰ KIẾN</small><strong>${fmtMoney(quote.fee)}</strong><div class="small-muted">Quãng đường khoảng ${Number(quote.distanceKm).toFixed(2)} km · Nguồn ${esc(quote.distanceSource || "OSRM")}</div></div><span class="badge blue">Version ${esc(quote.ruleVersion || "—")}</span></div>`; } catch (error) { showToast(error.message, "error"); } });
-    form.addEventListener("submit", async event => { event.preventDefault(); const submit = form.querySelector('button[type="submit"]'); submit.disabled = true; try { const result = await post("/shipments", bookingPayload(new FormData(form))); showToast("Đơn hàng đã được tạo.", "success"); state.detail = result.id; state.view = "details"; renderShell(); await renderView(); } catch (error) { showToast(error.message, "error"); submit.disabled = false; } });
+    const form = target.querySelector("#shipment-form");
+    form.addEventListener("input", event => {
+      state.quote = null;
+      target.querySelector("#quote-result").innerHTML = "";
+      const match = event.target?.name?.match(/^(pickup|dropoff)(Line|Ward|District|City)$/);
+      if (!match) return;
+      for (const suffix of ["Lat", "Lng"]) {
+        form.querySelector(`[name="${match[1]}${suffix}"]`).value = "";
+      }
+    });
+    target.querySelector("#quote-button").addEventListener("click", async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const body = bookingPayload(new FormData(form));
+        const quote = await post("/pricing/quote", body);
+        state.quote = quote;
+        target.querySelector("#quote-result").innerHTML = `<div class="quote-box"><div><small>PHÍ GIAO HÀNG DỰ KIẾN</small><strong>${fmtMoney(quote.fee)}</strong><div style="font-size:16px;font-weight:700;margin-top:8px">Quãng đường tính phí: ${Number(quote.distanceKm).toFixed(2)} km</div><div class="small-muted">Khoảng cách đường bộ · Nguồn ${esc(quote.distanceSource || "OSRM")}</div></div><span class="badge blue">Version ${esc(quote.ruleVersion || "—")}</span></div>`;
+      } catch (error) {
+        showToast(error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      try {
+        const result = await post("/shipments", bookingPayload(new FormData(form)));
+        showToast("Đơn hàng đã được tạo.", "success");
+        state.detail = result.id;
+        state.view = "details";
+        renderShell();
+        await renderView();
+      } catch (error) {
+        showToast(error.message, "error");
+        submit.disabled = false;
+      }
+    });
     bindViewButtons(target);
   }
   function bookingPayload(formData) { for (const prefix of ["pickup", "dropoff"]) { if (!formData.get(`${prefix}Lat`) || !formData.get(`${prefix}Lng`)) throw new Error(`Chưa chọn vị trí trên bản đồ cho ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}.`); } const n = key => Number(formData.get(key)); const text = key => String(formData.get(key) || "").trim(); return { pickupAddress: { line: text("pickupLine"), ward: text("pickupWard"), district: text("pickupDistrict"), city: text("pickupCity"), lat: n("pickupLat"), lng: n("pickupLng") }, dropoffAddress: { line: text("dropoffLine"), ward: text("dropoffWard"), district: text("dropoffDistrict"), city: text("dropoffCity"), lat: n("dropoffLat"), lng: n("dropoffLng") }, parcel: { weightKg: n("weightKg"), lengthCm: n("lengthCm"), widthCm: n("widthCm"), heightCm: n("heightCm") }, serviceType: text("serviceType") }; }
   function renderTracking(target) { target.innerHTML = `${welcome("Tra cứu đơn hàng", "Nhập mã vận đơn để xem trạng thái gần nhất và lịch sử xử lý.")}<section class="panel" style="max-width:800px"><form id="tracking-form"><div class="field"><label>Mã vận đơn</label><input name="trackingCode" placeholder="Ví dụ: A1B2C3D4E5F6A7B8" maxlength="16" minlength="12" style="text-transform:uppercase" required></div><button class="btn btn-primary" type="submit">Tra cứu trạng thái →</button></form><div id="tracking-result"></div></section>`; target.querySelector("#tracking-form").addEventListener("submit", async event => { event.preventDefault(); const code = String(new FormData(event.currentTarget).get("trackingCode")).trim().toUpperCase(); const box = target.querySelector("#tracking-result"); box.innerHTML = '<div class="page-loading">Đang tra cứu…</div>'; try { const result = await api(`/tracking/${encodeURIComponent(code)}`); const history = (result.history || []).map(item => `<div class="tracking-step"><b>${badge(item.toStatus)}</b><span>${fmtDate(item.occurredAt)}</span></div>`).join(""); box.innerHTML = `<div class="section-gap"><div class="panel-head"><div><h3>Đơn ${esc(result.trackingCode)}</h3><p>Tạo lúc ${fmtDate(result.createdAt)}</p></div>${badge(result.status)}</div><div class="tracking-result"><div class="tracking-step"><b>Điểm lấy</b><span>${esc(result.pickup?.city || "Địa chỉ lấy hàng đã lưu")}</span></div><div class="tracking-step"><b>Điểm giao</b><span>${esc(result.dropoff?.city || "Địa chỉ giao hàng đã lưu")}</span></div></div><div class="section-gap"><h3>Lịch sử trạng thái</h3><div class="tracking-result">${history || "Chưa có lịch sử bổ sung."}</div></div></div>`; } catch (error) { box.innerHTML = `<div class="notice error">${esc(error.message)}</div>`; } }); }
   async function renderTasks(target) {
     const tasks = await safeGet("/drivers/me/tasks", []);
-    target.innerHTML = `${welcome("Công việc tài xế", "Xem đơn được phân công, phản hồi điều phối và mở Google Maps để chỉ đường.", '<button class="btn btn-outline" data-action="driver-status" data-status="AVAILABLE">● Sẵn sàng</button><button class="btn btn-outline" data-action="driver-status" data-status="OFFLINE">Đang ngoại tuyến</button>')}<div class="notice info">Hãy cập nhật vị trí và trạng thái trước khi nhận đơn. Nút chỉ đường mở ứng dụng Google Maps nếu đã cài đặt.</div><div class="grid" style="gap:16px">${tasks.map(task => { const shipment = task.shipment || {}; const navs = task.navigationUrls || {}; return `<article class="panel"><div class="panel-head"><div><h3>Đơn ${esc(shipment.trackingCode || task.shipmentId?.slice(0, 8))}</h3><p>Giao lúc phân công: ${fmtDate(task.assignedAt)}</p></div>${badge(task.status)}</div><div class="grid form-grid"><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line || "—")}, ${esc(shipment.pickup?.district || "")}</span></div><div class="tracking-step"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line || "—")}, ${esc(shipment.dropoff?.district || "")}</span></div></div><div class="map-links section-gap">${navs.pickup ? `<a class="btn btn-light btn-sm" target="_blank" rel="noopener noreferrer" href="${esc(navs.pickup)}">↗ Đi đến điểm lấy hàng</a>` : ""}${navs.dropoff ? `<a class="btn btn-light btn-sm" target="_blank" rel="noopener noreferrer" href="${esc(navs.dropoff)}">↗ Đi đến điểm giao hàng</a>` : ""}</div><div class="action-group section-gap">${task.status === "PENDING" ? `<button class="btn btn-primary btn-sm" data-action="respond-assignment" data-id="${esc(task.id)}" data-response="ACCEPT">Nhận đơn</button><button class="btn btn-danger btn-sm" data-action="respond-assignment" data-id="${esc(task.id)}" data-response="REJECT">Từ chối</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "RECEIVED" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="IN_TRANSIT">Đã lấy hàng</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "IN_TRANSIT" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="OUT_FOR_DELIVERY">Bắt đầu giao</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "OUT_FOR_DELIVERY" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="DELIVERED">Xác nhận giao thành công</button>` : ""}</div></article>`; }).join("") || '<section class="panel empty"><div class="empty-icon">⇢</div><h3>Chưa có công việc được phân công</h3><p>Các đơn mới sẽ xuất hiện tại đây khi được điều phối.</p></section>'}</div>`;
+    target.innerHTML = `${welcome("Công việc tài xế", "Đơn được phân công sẽ tự làm mới tại đây mỗi 15 giây.", '<button class="btn btn-outline" data-action="refresh-tasks">↻ Làm mới</button><button class="btn btn-outline" data-action="update-driver-location">⌖ Cập nhật vị trí GPS</button><button class="btn btn-outline" data-action="driver-status" data-status="AVAILABLE">● Sẵn sàng</button><button class="btn btn-outline" data-action="driver-status" data-status="OFFLINE">Đang ngoại tuyến</button>')}<div class="notice info">Để được tự động phân công, hãy bật trạng thái sẵn sàng và cập nhật vị trí GPS. Vị trí cần được làm mới định kỳ để đảm bảo điều phối chính xác.</div><div class="grid" style="gap:16px">${tasks.map(task => { const shipment = task.shipment || {}; const navs = task.navigationUrls || {}; return `<article class="panel"><div class="panel-head"><div><h3>Đơn ${esc(shipment.trackingCode || task.shipmentId?.slice(0, 8))}</h3><p>Giao lúc phân công: ${fmtDate(task.assignedAt)}</p></div>${badge(task.status)}</div><div class="grid form-grid"><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line || "—")}, ${esc(shipment.pickup?.district || "")}</span></div><div class="tracking-step"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line || "—")}, ${esc(shipment.dropoff?.district || "")}</span></div></div><div class="map-links section-gap">${navs.pickup ? `<a class="btn btn-light btn-sm" target="_blank" rel="noopener noreferrer" href="${esc(navs.pickup)}">↗ Đi đến điểm lấy hàng</a>` : ""}${navs.dropoff ? `<a class="btn btn-light btn-sm" target="_blank" rel="noopener noreferrer" href="${esc(navs.dropoff)}">↗ Đi đến điểm giao hàng</a>` : ""}</div><div class="action-group section-gap">${task.status === "PENDING" ? `<button class="btn btn-primary btn-sm" data-action="respond-assignment" data-id="${esc(task.id)}" data-response="ACCEPT">Nhận đơn</button><button class="btn btn-danger btn-sm" data-action="respond-assignment" data-id="${esc(task.id)}" data-response="REJECT">Từ chối</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "RECEIVED" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="IN_TRANSIT">Đã lấy hàng</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "IN_TRANSIT" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="OUT_FOR_DELIVERY">Bắt đầu giao</button>` : ""}${task.status === "ACCEPTED" && shipment.status === "OUT_FOR_DELIVERY" ? `<button class="btn btn-primary btn-sm" data-action="transition" data-id="${esc(shipment.id)}" data-status="DELIVERED">Xác nhận giao thành công</button>` : ""}</div></article>`; }).join("") || '<section class="panel empty"><div class="empty-icon">⇢</div><h3>Chưa có công việc được phân công</h3><p>Các đơn mới sẽ xuất hiện tại đây khi được điều phối.</p></section>'}</div>`;
     bindViewButtons(target);
+    if (!state.taskRefreshTimer) {
+      state.taskRefreshTimer = setInterval(() => {
+        if (state.view !== "tasks" || state.taskRefreshPending) return;
+        state.taskRefreshPending = true;
+        renderView().finally(() => { state.taskRefreshPending = false; });
+      }, 15000);
+    }
   }
   async function renderUsers(target) {
     if (state.user.role !== "ADMIN") { const queue = await safeGet("/dispatch/queue", []); state.lastQueue = Array.isArray(queue) ? queue : []; target.innerHTML = `${welcome("Vận hành & điều phối", "Danh sách hàng chờ và trạng thái điều phối.")}<section class="panel"><div class="panel-head"><h3>Đơn chờ phân công</h3><button class="btn btn-outline btn-sm" data-action="reload-users">↻ Làm mới</button></div>${state.lastQueue.map(q => `<div class="kpi-row"><span><b>${esc(q.trackingCode || q.id.slice(0, 8))}</b><br><small>${fmtDate(q.createdAt)}</small></span><button class="btn btn-primary btn-sm" data-action="assign" data-id="${esc(q.id)}">Phân công tự động</button></div>`).join("") || '<div class="empty">Không có đơn cần điều phối.</div>'}</section>`; bindViewButtons(target); return; }
@@ -308,19 +352,41 @@
     const action = button.dataset.action; const id = button.dataset.id;
     try {
       if (action === "details") { state.detail = id; state.view = "details"; await renderView(); }
-      else if (action === "assign") { button.disabled = true; await post(`/shipments/${id}/assign-driver`, {}); showToast("Đã yêu cầu phân công tài xế."); await renderView(); }
+      else if (action === "assign") {
+        button.disabled = true;
+        const result = await post(`/shipments/${id}/assign-driver`, {});
+        if (result.assignment === null) {
+          const reason = result.reason === "MAX_ATTEMPTS"
+            ? "Đơn đã hết số lần tự động phân công. Vui lòng kiểm tra tài xế và xử lý thủ công."
+            : "Không tìm thấy tài xế phù hợp. Hãy yêu cầu tài xế bật trạng thái sẵn sàng và cập nhật vị trí GPS mới.";
+          showToast(reason, "error");
+        } else {
+          showToast(result.status === "PENDING" ? "Đã gửi yêu cầu phân công. Tài xế sẽ thấy đơn trong tối đa 15 giây." : "Đơn đã có yêu cầu phân công đang chờ tài xế.");
+        }
+        await renderView();
+      }
       else if (action === "toggle-user") { button.disabled = true; await patch(`/admin/users/${id}/active`, { active: button.dataset.active === "true" }); showToast("Đã cập nhật trạng thái tài khoản."); await renderView(); }
       else if (action === "reload-users") await renderView();
       else if (action === "reload-shipments") await renderView();
+      else if (action === "refresh-tasks") await renderView();
       else if (action === "respond-assignment") { button.disabled = true; await post(`/assignments/${id}/respond`, { action: button.dataset.response }); showToast(button.dataset.response === "ACCEPT" ? "Đã nhận đơn." : "Đã từ chối đơn."); await renderView(); }
       else if (action === "transition") { button.disabled = true; await post(`/shipments/${id}/transition`, { toStatus: button.dataset.status }); showToast("Đã cập nhật trạng thái đơn."); await renderView(); }
-      else if (action === "driver-status") { await patch("/drivers/me/status", { status: button.dataset.status }); showToast(`Trạng thái: ${button.dataset.status === "AVAILABLE" ? "Sẵn sàng" : "Ngoại tuyến"}.`); }
+      else if (action === "driver-status") { await patch("/drivers/me/status", { status: button.dataset.status }); showToast(`Trạng thái: ${button.dataset.status === "AVAILABLE" ? "Sẵn sàng" : "Ngoại tuyến"}.`); await renderView(); }
+      else if (action === "update-driver-location") {
+        if (!navigator.geolocation) throw new Error("Trình duyệt này không hỗ trợ lấy vị trí GPS.");
+        button.disabled = true;
+        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }));
+        await patch("/drivers/me/location", { lat: position.coords.latitude, lng: position.coords.longitude });
+        showToast("Đã cập nhật vị trí GPS. Bạn có thể nhận phân công mới.");
+        await renderView();
+      }
       else if (action === "pick-address-map") openAddressPicker(button.dataset.prefix, button.closest("form"));
       else if (action === "support") showToast("Kiểm tra README và docs/USER_GUIDE.md để xem hướng dẫn sử dụng.", "success");
       else if (action === "retry") await renderView();
     } catch (error) { button.disabled = false; showToast(error.message, "error"); }
   }
   async function logout(remote = true) {
+    if (state.taskRefreshTimer) { clearInterval(state.taskRefreshTimer); state.taskRefreshTimer = null; }
     if (remote && state.refreshToken) { try { await post("/auth/logout", { refreshToken: state.refreshToken }); } catch { /* session cleanup is best-effort; local credentials are discarded regardless */ } }
     state.token = null; state.refreshToken = null; state.user = null; state.view = "dashboard"; state.detail = null; renderAuth("login", "Bạn đã đăng xuất an toàn.");
   }

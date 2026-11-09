@@ -21,39 +21,65 @@ async function main() {
       },
     });
     const password = process.env.DEMO_PASSWORD;
-    if (!password || password.length < 10 || Buffer.byteLength(password) > 72)
-      throw new Error("Set DEMO_PASSWORD (10–72 bytes) to seed demo accounts");
-    for (const [email, role] of [
-      ["sender@demo.local", "SENDER"],
-      ["driver-a@demo.local", "DRIVER"],
-      ["driver-b@demo.local", "DRIVER"],
-      ["dispatcher@demo.local", "DISPATCHER"],
-      ["admin@demo.local", "ADMIN"],
+    const passwordBytes = password ? Buffer.byteLength(password) : 0;
+    if (
+      !password ||
+      (password !== "admin" && passwordBytes < 10) ||
+      passwordBytes > 72
+    )
+      throw new Error("Set DEMO_PASSWORD to 'admin' or a strong 10–72 byte password");
+    const passwordHash = await hash(password, 12);
+    for (const [email, legacyEmail, role] of [
+      ["sender@gmail.com", "sender@demo.local", "SENDER"],
+      ["driver-a@gmail.com", "driver-a@demo.local", "DRIVER"],
+      ["driver-b@gmail.com", "driver-b@demo.local", "DRIVER"],
+      ["dispatcher@gmail.com", "dispatcher@demo.local", "DISPATCHER"],
+      ["admin@gmail.com", "admin@demo.local", "ADMIN"],
     ] as const) {
-      const user = await db.user.upsert({
-        where: { email },
-        update: { emailVerified: true, active: true },
-        create: {
-          email,
-          name: email.split("@")[0],
-          role,
-          passwordHash: await hash(password, 12),
-          emailVerified: true,
-        },
-      });
+      const legacyUser = await db.user.findUnique({ where: { email: legacyEmail } });
+      const existingUser = await db.user.findUnique({ where: { email } });
+      if (legacyUser && existingUser && legacyUser.id !== existingUser.id)
+        throw new Error(`Cannot migrate ${legacyEmail}: ${email} is already in use`);
+      const user = legacyUser
+        ? await db.user.update({
+            where: { id: legacyUser.id },
+            data: {
+              email,
+              name: email.split("@")[0],
+              role,
+              passwordHash,
+              emailVerified: true,
+              active: true,
+            },
+          })
+        : await db.user.upsert({
+            where: { email },
+            update: {
+              name: email.split("@")[0],
+              role,
+              passwordHash,
+              emailVerified: true,
+              active: true,
+            },
+            create: {
+              email,
+              name: email.split("@")[0],
+              role,
+              passwordHash,
+              emailVerified: true,
+            },
+          });
       if (role === "DRIVER") {
         const driver = await db.driver.upsert({
           where: { userId: user.id },
           update: {},
           create: { userId: user.id, status: "AVAILABLE" },
         });
-        const lng = email.startsWith("driver-a") ? 106.663 : 106.666;
+        const lng = email === "driver-a@gmail.com" ? 106.663 : 106.666;
         await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${lng},10.754),4326)::geography,"lastLocationAt"=now() WHERE id=${driver.id}::uuid`;
       }
     }
-    console.log(
-      "Pricing and five demo users seeded. Existing passwords are preserved.",
-    );
+    console.log("Pricing and five demo users seeded with the configured DEMO_PASSWORD.");
   } finally {
     await db.$disconnect();
   }

@@ -216,6 +216,14 @@ describe("Driver dispatch", () => {
   it("lists dispatcher queue", async () => {
     db.shipment.findMany.mockResolvedValue([]);
     expect(await service.queue()).toEqual([]);
+    expect(db.shipment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: "RECEIVED",
+          assignments: { none: { status: { in: ["PENDING", "ACCEPTED"] } } },
+        },
+      }),
+    );
   });
   it("runs expiration and queue assignment jobs", async () => {
     db.driverAssignment.findMany.mockResolvedValue([{ id: "assignment" }]);

@@ -28,9 +28,9 @@ function Check([string]$Name, [bool]$Ok) {
   if ($Ok) { "PASS  $Name" } else { "FAIL  $Name"; $script:failed++ }
 }
 
-$sender = Login "sender@demo.local"
-$driver = Login "driver-a@demo.local"
-$admin  = Login "admin@demo.local"
+$sender = Login "sender@gmail.com"
+$driver = Login "driver-a@gmail.com"
+$admin  = Login "admin@gmail.com"
 
 if ($ReceiverSecret) {
   Api POST "/webhooks/subscriptions" $admin @{ url = "http://receiver:4000/webhooks/shipment"; secret = $ReceiverSecret } | Out-Null

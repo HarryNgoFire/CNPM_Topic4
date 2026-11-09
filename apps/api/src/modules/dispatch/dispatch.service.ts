@@ -231,7 +231,7 @@ export class DispatchService {
     return this.db.shipment.findMany({
       where: {
         status: "RECEIVED",
-        assignments: { none: { status: "ACCEPTED" } },
+        assignments: { none: { status: { in: ["PENDING", "ACCEPTED"] } } },
       },
       include: { assignments: { orderBy: { assignedAt: "desc" }, take: 1 } },
       orderBy: { createdAt: "asc" },

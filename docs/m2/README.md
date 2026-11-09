@@ -14,7 +14,7 @@ Tại thư mục gốc repo, sao chép `.env.example` thành `.env`. Đặt các
 - `POSTGRES_PASSWORD`: mật khẩu database local, dùng chuỗi chữ/số hoặc hex để phù hợp URL.
 - `DATABASE_URL`: `postgresql://topic4:<POSTGRES_PASSWORD>@localhost:5432/topic4` khi chạy API bằng npm.
 - `JWT_SECRET`: chuỗi ngẫu nhiên tối thiểu 32 ký tự, thay hoàn toàn giá trị mẫu.
-- `DEMO_PASSWORD`: mật khẩu tài khoản demo, tối thiểu 10 ký tự, tối đa 72 byte UTF-8.
+- `DEMO_PASSWORD`: mật khẩu tài khoản demo; mặc định `admin`, tối đa 72 byte UTF-8. Chỉ dùng demo local.
 - `WEBHOOK_RECEIVER_SECRET`: chuỗi ngẫu nhiên tối thiểu 32 ký tự.
 - `OSRM_BASE_URL`: mặc định dùng máy chủ demo công khai `https://router.project-osrm.org`; không cần API key. Xem các giới hạn và lựa chọn tự host trong [google-maps-integration.md](google-maps-integration.md).
 
@@ -34,13 +34,13 @@ Các tài khoản được seed:
 
 | Email                 | Role       |
 | --------------------- | ---------- |
-| sender@demo.local     | SENDER     |
-| driver-a@demo.local   | DRIVER     |
-| driver-b@demo.local   | DRIVER     |
-| dispatcher@demo.local | DISPATCHER |
-| admin@demo.local      | ADMIN      |
+| sender@gmail.com     | SENDER     |
+| driver-a@gmail.com   | DRIVER     |
+| driver-b@gmail.com   | DRIVER     |
+| dispatcher@gmail.com | DISPATCHER |
+| admin@gmail.com      | ADMIN      |
 
-Tất cả dùng `DEMO_PASSWORD` tại lần seed đầu tiên. Seed giữ nguyên mật khẩu tài khoản đã tồn tại. Driver seed có tọa độ mới; sau 5 phút cần cập nhật vị trí qua API để tiếp tục được tự gán.
+Tất cả dùng mật khẩu `DEMO_PASSWORD` (mặc định `admin`); seed cập nhật lại mật khẩu mỗi lần chạy. Các email này là tên đăng nhập demo local, không đảm bảo là hộp thư Gmail có thật. Driver seed có tọa độ mới; sau 5 phút cần cập nhật vị trí qua API để tiếp tục được tự gán.
 
 ## Chạy backend bằng npm
 
