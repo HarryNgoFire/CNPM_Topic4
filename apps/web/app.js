@@ -149,11 +149,23 @@
     const filter = () => { const search = (target.querySelector("#shipment-search")?.value || "").toLowerCase(); const status = target.querySelector("#shipment-filter")?.value || ""; const filtered = items.filter(x => String(x.trackingCode || x.id).toLowerCase().includes(search) && (!status || x.status === status)); target.querySelector("#shipment-table").innerHTML = shipmentTable(filtered); bindViewButtons(target); };
     target.querySelector("#shipment-search")?.addEventListener("input", filter); target.querySelector("#shipment-filter")?.addEventListener("change", filter); bindViewButtons(target);
   }
+  let activeSenderMapController = null;
+
   function addressFields(prefix, title) {
     const pickup = prefix === "pickup";
     return `<div class="form-section">
-      <h3>${title}</h3>
-      <p>${pickup ? "Nhập địa chỉ, sau đó ghim chính xác điểm lấy hàng trên bản đồ." : "Nhập địa chỉ, sau đó ghim chính xác điểm giao hàng trên bản đồ."}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">${title}</h3>
+        ${pickup ? `<button type="button" class="btn btn-outline btn-sm" id="btn-gps-pickup">⌖ Vị trí GPS của tôi</button>` : ""}
+      </div>
+      <p class="small-muted">${pickup ? "Tìm kiếm địa chỉ hoặc kéo thả ghim A trên bản đồ bên dưới." : "Tìm kiếm địa chỉ hoặc kéo thả ghim B trên bản đồ bên dưới."}</p>
+      
+      <div class="field" style="position:relative">
+        <label>Tìm kiếm địa chỉ (gợi ý tự động)</label>
+        <input id="${prefix}-search-input" placeholder="Gõ ít nhất 3 ký tự để tìm kiếm…" autocomplete="off">
+        <div id="${prefix}-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:100;max-height:220px;overflow-y:auto"></div>
+      </div>
+
       <div class="field">
         <label>Số nhà, tên đường</label>
         <input name="${prefix}Line" maxlength="255" placeholder="Số nhà, tên đường" required>
@@ -172,130 +184,136 @@
         <label>Tỉnh / thành phố</label>
         <input name="${prefix}City" value="Thành phố Hồ Chí Minh" maxlength="100" required>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Vĩ độ ${pickup ? "điểm lấy" : "điểm giao"}</label>
-          <input name="${prefix}Lat" type="number" step="any" min="-90" max="90" placeholder="Chọn trên bản đồ" readonly required>
-        </div>
-        <div class="field">
-          <label>Kinh độ ${pickup ? "điểm lấy" : "điểm giao"}</label>
-          <input name="${prefix}Lng" type="number" step="any" min="-180" max="180" placeholder="Chọn trên bản đồ" readonly required>
-        </div>
+      <div class="field-row" style="display:none">
+        <input name="${prefix}Lat" type="hidden">
+        <input name="${prefix}Lng" type="hidden">
       </div>
-      <button type="button" class="btn btn-outline btn-sm" data-action="pick-address-map" data-prefix="${prefix}">⌖ Ghim ${pickup ? "điểm lấy" : "điểm giao"} trên bản đồ</button>
-      <p class="small-muted">Kiểm tra ghim ${pickup ? "điểm lấy" : "điểm giao"} trùng với địa chỉ trước khi tiếp tục.</p>
-    </div>`; 
-  }
-  let pickerMap = null;
-  function openAddressPicker(prefix, form) {
-    const latInput = form.querySelector(`[name="${prefix}Lat"]`);
-    const lngInput = form.querySelector(`[name="${prefix}Lng"]`);
-    const old = document.querySelector("#address-map-modal"); if (old) old.remove();
-    const overlay = document.createElement("div"); overlay.id = "address-map-modal"; overlay.className = "map-overlay";
-    
-    // Đã cố định width: 100%, overflow: hidden để không vỡ các mảnh gạch bản đồ
-    overlay.innerHTML = `<div class="map-dialog" style="width: min(720px, 94vw); overflow: hidden;">
-      <div class="panel-head">
-        <h3>Chọn chính xác ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}</h3>
-        <button class="btn btn-outline btn-sm" id="map-close" type="button">Đóng</button>
-      </div>
-      <p class="small-muted">Phóng to và bấm vào đúng vị trí trên bản đồ. Ghim này dùng để tính giá và điều hướng tài xế.</p>
-      <div id="address-picker-map" style="height: 380px; width: 100%; border-radius: 12px; position: relative; overflow: hidden; background: #eef2f8;"></div>
-      <p id="map-picked" class="small-muted" style="margin-top: 10px;">Chưa chọn điểm</p>
-      <button id="map-confirm" type="button" class="btn btn-primary" disabled>Xác nhận tọa độ</button>
-      <p class="small-muted" style="margin-top: 8px;">Bản đồ tải nhanh qua Esri CDN</p>
     </div>`;
-    document.body.appendChild(overlay);
-
-    const close = () => { 
-      if (pickerMap) { pickerMap.remove(); pickerMap = null; } 
-      overlay.remove(); 
-    };
-    overlay.querySelector("#map-close").onclick = close;
-    overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-
-    if (!window.L) { 
-      overlay.querySelector("#map-picked").textContent = "Không tải được thư viện bản đồ. Kiểm tra Internet."; 
-      return; 
-    }
-
-    const initial = latInput.value && lngInput.value ? [Number(latInput.value), Number(lngInput.value)] : [10.7769, 106.7009];
-  // Giới hạn maxZoom là 17 để tránh lỗi "Map data not yet available"
-  pickerMap = L.map("address-picker-map", {
-    maxZoom: 17,
-    minZoom: 5
-  }).setView(initial, latInput.value ? 16 : 13);
-
-  // Dùng server tile OSM chuẩn của Wikimedia / Carto Voyager hoặc Esri có giới hạn zoom rõ ràng
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 17,
-    maxNativeZoom: 17,
-    attribution: 'Tiles &copy; Esri'
-  }).addTo(pickerMap);
-
-    let chosen = null; 
-    let marker = null;
-    if (latInput.value && lngInput.value) { 
-      marker = L.marker(initial).addTo(pickerMap); 
-      chosen = initial; 
-      overlay.querySelector("#map-confirm").disabled = false; 
-    }
-
-    pickerMap.on("click", e => { 
-      chosen = [Number(e.latlng.lat.toFixed(7)), Number(e.latlng.lng.toFixed(7))]; 
-      if (marker) marker.setLatLng(chosen); 
-      else marker = L.marker(chosen).addTo(pickerMap); 
-      overlay.querySelector("#map-picked").textContent = `Tọa độ đã chọn: ${chosen[0]}, ${chosen[1]}`; 
-      overlay.querySelector("#map-confirm").disabled = false; 
-    });
-
-    overlay.querySelector("#map-confirm").onclick = () => { 
-      if (!chosen) return; 
-      latInput.value = String(chosen[0]); 
-      lngInput.value = String(chosen[1]); 
-      latInput.dispatchEvent(new Event("input", { bubbles: true })); 
-      close(); 
-      showToast("Đã xác nhận tọa độ trên bản đồ."); 
-    };
-
-    // Ép render lại toàn bộ lưới ngay sau khi modal bung xong (khắc phục lỗi chỉ load 2 ô)
-    setTimeout(() => {
-      pickerMap?.invalidateSize();
-    }, 200);
   }
-  function renderNewShipment(target) {
+
+  async function renderNewShipment(target) {
     state.quote = null;
-    target.innerHTML = `${welcome("Tạo đơn giao hàng", "Tạo yêu cầu giao nhận mới. Phí được ước tính theo quãng đường từ dịch vụ định tuyến.")}<form id="shipment-form"><section class="panel"><div class="grid form-grid">${addressFields("pickup", "01 · Điểm lấy hàng")}${addressFields("dropoff", "02 · Điểm giao hàng")}</div><div class="form-section"><h3>03 · Thông tin kiện hàng</h3><p>Thông tin này dùng để tính phụ phí khối lượng theo bảng giá hiện tại.</p><div class="grid form-grid"><div class="field"><label>Khối lượng (kg)</label><input name="weightKg" type="number" min="0.01" max="9999" step="0.01" value="1" required></div><div class="field"><label>Loại dịch vụ</label><select name="serviceType"><option value="STANDARD">Tiêu chuẩn</option><option value="EXPRESS">Hỏa tốc</option></select></div><div class="field"><label>Dài (cm)</label><input name="lengthCm" type="number" min="0.01" step="0.01" value="20" required></div><div class="field"><label>Rộng (cm)</label><input name="widthCm" type="number" min="0.01" step="0.01" value="15" required></div><div class="field"><label>Cao (cm)</label><input name="heightCm" type="number" min="0.01" step="0.01" value="10" required></div></div></div><div id="quote-result"></div><div class="form-actions"><button class="btn btn-outline" type="button" id="quote-button">Tính phí dự kiến</button><button class="btn btn-primary" type="submit">Tạo đơn giao hàng →</button></div><p class="small-muted">Quãng đường OSRM dùng profile driving; tuyến xe máy Google Maps có thể khác. Phí cuối cùng sẽ được lưu theo báo giá backend.</p></section></form>`;
+    if (activeSenderMapController) {
+      activeSenderMapController.destroy();
+      activeSenderMapController = null;
+    }
+
+    target.innerHTML = `${welcome("Tạo đơn giao hàng", "Tạo yêu cầu giao nhận mới với định tuyến tự động OSRM và bản đồ MapLibre.")}<form id="shipment-form"><section class="panel"><div class="grid form-grid">${addressFields("pickup", "01 · Điểm lấy hàng")}${addressFields("dropoff", "02 · Điểm giao hàng")}</div><div class="form-section"><h3>Bản đồ lộ trình & vị trí ghim (A → B)</h3><p class="small-muted">Bạn có thể kéo thả trực tiếp ghim <b>A (Lấy hàng)</b> và <b>B (Giao hàng)</b> trên bản đồ để cập nhật tọa độ chính xác.</p><div id="sender-shipment-map" class="moveflow-map-container" style="height:380px"></div></div><div class="form-section"><h3>03 · Thông tin kiện hàng</h3><p>Thông tin này dùng để tính phụ phí khối lượng theo bảng giá hiện tại.</p><div class="grid form-grid"><div class="field"><label>Khối lượng (kg)</label><input name="weightKg" type="number" min="0.01" max="9999" step="0.01" value="1" required></div><div class="field"><label>Loại dịch vụ</label><select name="serviceType"><option value="STANDARD">Tiêu chuẩn</option><option value="EXPRESS">Hỏa tốc</option></select></div><div class="field"><label>Dài (cm)</label><input name="lengthCm" type="number" min="0.01" step="0.01" value="20" required></div><div class="field"><label>Rộng (cm)</label><input name="widthCm" type="number" min="0.01" step="0.01" value="15" required></div><div class="field"><label>Cao (cm)</label><input name="heightCm" type="number" min="0.01" step="0.01" value="10" required></div></div></div><div id="quote-result"></div><div class="form-actions"><button class="btn btn-outline" type="button" id="quote-button">Tính phí dự kiến</button><button class="btn btn-primary" type="submit">Tạo đơn giao hàng →</button></div><p class="small-muted">Quãng đường và lộ trình tính tự động qua OSRM driving profile. Bản đồ nguồn OpenStreetMap.</p></section></form>`;
+
     const form = target.querySelector("#shipment-form");
-    form.addEventListener("input", event => {
-      state.quote = null;
-      target.querySelector("#quote-result").innerHTML = "";
-      const match = event.target?.name?.match(/^(pickup|dropoff)(Line|Ward|District|City)$/);
-      if (!match) return;
-      for (const suffix of ["Lat", "Lng"]) {
-        form.querySelector(`[name="${match[1]}${suffix}"]`).value = "";
+    const mapEl = target.querySelector("#sender-shipment-map");
+
+    try {
+      const { SenderMapController } = await import("./map/sender-map-controller.js");
+      const { debounce } = await import("./map/api-clients.js");
+
+      activeSenderMapController = new SenderMapController({
+        mapElement: mapEl,
+        form,
+        api: { post },
+        onQuoteChanged: (quote) => {
+          state.quote = quote;
+          const box = target.querySelector("#quote-result");
+          if (!box) return;
+          if (!quote) {
+            box.innerHTML = "";
+            return;
+          }
+          const durationMin = Math.round(Number(quote.durationSeconds || 0) / 60);
+          box.innerHTML = `<div class="quote-box"><div><small>PHÍ GIAO HÀNG DỰ KIẾN</small><strong>${fmtMoney(quote.fee)}</strong><div style="font-size:16px;font-weight:700;margin-top:8px">Quãng đường: ${Number(quote.distanceKm).toFixed(2)} km (~${durationMin} phút)</div><div class="small-muted">Định tuyến đường bộ · Nguồn ${esc(quote.distanceSource || "OSRM")}</div></div><span class="badge blue">Version ${esc(quote.ruleVersion || "—")}</span></div>`;
+        },
+      });
+
+      await activeSenderMapController.mount();
+
+      target.querySelector("#btn-gps-pickup")?.addEventListener("click", async () => {
+        try {
+          await activeSenderMapController.fillPickupWithGps();
+          showToast("Đã lấy vị trí GPS hiện tại cho điểm lấy hàng.");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      });
+
+      for (const prefix of ["pickup", "dropoff"]) {
+        const searchInput = target.querySelector(`#${prefix}-search-input`);
+        const dropdown = target.querySelector(`#${prefix}-search-results`);
+        if (searchInput && dropdown) {
+          const doSearch = debounce(async () => {
+            const q = searchInput.value.trim();
+            if (q.length < 3) {
+              dropdown.style.display = "none";
+              dropdown.innerHTML = "";
+              return;
+            }
+            try {
+              const results = await activeSenderMapController.geocoding.search(q, 5);
+              if (!results || results.length === 0) {
+                dropdown.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--muted)">Không tìm thấy địa chỉ phù hợp</div>';
+                dropdown.style.display = "block";
+                return;
+              }
+              dropdown.innerHTML = results.map((item, idx) => `
+                <div class="search-item" data-idx="${idx}" style="padding:9px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid #edf0f6">
+                  <b>${esc(item.address?.line || item.label.split(",")[0])}</b>
+                  <div style="font-size:11px;color:var(--muted)">${esc(item.label)}</div>
+                </div>
+              `).join("");
+              dropdown.style.display = "block";
+
+              dropdown.querySelectorAll(".search-item").forEach(itemEl => {
+                itemEl.addEventListener("click", () => {
+                  const item = results[Number(itemEl.dataset.idx)];
+                  activeSenderMapController.selectSearchResult(prefix, item);
+                  dropdown.style.display = "none";
+                  searchInput.value = item.label;
+                });
+              });
+            } catch (err) {
+              dropdown.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--red)">${esc(err.message)}</div>`;
+              dropdown.style.display = "block";
+            }
+          }, 350);
+
+          searchInput.addEventListener("input", doSearch);
+          document.addEventListener("click", (e) => {
+            if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+              dropdown.style.display = "none";
+            }
+          });
+        }
       }
-    });
+    } catch (err) {
+      console.error("Map initialization failed", err);
+    }
+
     target.querySelector("#quote-button").addEventListener("click", async event => {
       const button = event.currentTarget;
       button.disabled = true;
       try {
-        const body = bookingPayload(new FormData(form));
+        const body = activeSenderMapController ? activeSenderMapController.getBookingPayload() : bookingPayload(new FormData(form));
         const quote = await post("/pricing/quote", body);
         state.quote = quote;
-        target.querySelector("#quote-result").innerHTML = `<div class="quote-box"><div><small>PHÍ GIAO HÀNG DỰ KIẾN</small><strong>${fmtMoney(quote.fee)}</strong><div style="font-size:16px;font-weight:700;margin-top:8px">Quãng đường tính phí: ${Number(quote.distanceKm).toFixed(2)} km</div><div class="small-muted">Khoảng cách đường bộ · Nguồn ${esc(quote.distanceSource || "OSRM")}</div></div><span class="badge blue">Version ${esc(quote.ruleVersion || "—")}</span></div>`;
+        if (activeSenderMapController && quote.geometry) {
+          activeSenderMapController.engine?.setRoute(quote.geometry);
+          activeSenderMapController.engine?.fitRelevantPoints();
+        }
+        const durationMin = Math.round(Number(quote.durationSeconds || 0) / 60);
+        target.querySelector("#quote-result").innerHTML = `<div class="quote-box"><div><small>PHÍ GIAO HÀNG DỰ KIẾN</small><strong>${fmtMoney(quote.fee)}</strong><div style="font-size:16px;font-weight:700;margin-top:8px">Quãng đường tính phí: ${Number(quote.distanceKm).toFixed(2)} km (~${durationMin} phút)</div><div class="small-muted">Khoảng cách đường bộ · Nguồn ${esc(quote.distanceSource || "OSRM")}</div></div><span class="badge blue">Version ${esc(quote.ruleVersion || "—")}</span></div>`;
       } catch (error) {
         showToast(error.message, "error");
       } finally {
         button.disabled = false;
       }
     });
+
     form.addEventListener("submit", async event => {
       event.preventDefault();
       const submit = form.querySelector('button[type="submit"]');
       submit.disabled = true;
       try {
-        const result = await post("/shipments", bookingPayload(new FormData(form)));
+        const body = activeSenderMapController ? activeSenderMapController.getBookingPayload() : bookingPayload(new FormData(form));
+        const result = await post("/shipments", body);
         showToast("Đơn hàng đã được tạo.", "success");
         state.detail = result.id;
         state.view = "details";
@@ -308,7 +326,7 @@
     });
     bindViewButtons(target);
   }
-  function bookingPayload(formData) { for (const prefix of ["pickup", "dropoff"]) { if (!formData.get(`${prefix}Lat`) || !formData.get(`${prefix}Lng`)) throw new Error(`Chưa chọn vị trí trên bản đồ cho ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}.`); } const n = key => Number(formData.get(key)); const text = key => String(formData.get(key) || "").trim(); return { pickupAddress: { line: text("pickupLine"), ward: text("pickupWard"), district: text("pickupDistrict"), city: text("pickupCity"), lat: n("pickupLat"), lng: n("pickupLng") }, dropoffAddress: { line: text("dropoffLine"), ward: text("dropoffWard"), district: text("dropoffDistrict"), city: text("dropoffCity"), lat: n("dropoffLat"), lng: n("dropoffLng") }, parcel: { weightKg: n("weightKg"), lengthCm: n("lengthCm"), widthCm: n("widthCm"), heightCm: n("heightCm") }, serviceType: text("serviceType") }; }
+  function bookingPayload(formData) { for (const prefix of ["pickup", "dropoff"]) { if (!formData.get(`${prefix}Lat`) || !formData.get(`${prefix}Lng`)) throw new Error(`Chưa chọn vị trí trên bản đồ cho ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}.`); } const n = key => Number(formData.get(key)); const text = key => String(formData.get(key) || "").trim(); return { pickupAddress: { line: text("pickupLine"), ward: text("pickupWard"), district: text("pickupDistrict"), city: text("pickupCity") || "Thành phố Hồ Chí Minh", lat: n("pickupLat"), lng: n("pickupLng") }, dropoffAddress: { line: text("dropoffLine"), ward: text("dropoffWard"), district: text("dropoffDistrict"), city: text("dropoffCity") || "Thành phố Hồ Chí Minh", lat: n("dropoffLat"), lng: n("dropoffLng") }, parcel: { weightKg: n("weightKg"), lengthCm: n("lengthCm"), widthCm: n("widthCm"), heightCm: n("heightCm") }, serviceType: text("serviceType") }; }
   function renderTracking(target) { target.innerHTML = `${welcome("Tra cứu đơn hàng", "Nhập mã vận đơn để xem trạng thái gần nhất và lịch sử xử lý.")}<section class="panel" style="max-width:800px"><form id="tracking-form"><div class="field"><label>Mã vận đơn</label><input name="trackingCode" placeholder="Ví dụ: A1B2C3D4E5F6A7B8" maxlength="16" minlength="12" style="text-transform:uppercase" required></div><button class="btn btn-primary" type="submit">Tra cứu trạng thái →</button></form><div id="tracking-result"></div></section>`; target.querySelector("#tracking-form").addEventListener("submit", async event => { event.preventDefault(); const code = String(new FormData(event.currentTarget).get("trackingCode")).trim().toUpperCase(); const box = target.querySelector("#tracking-result"); box.innerHTML = '<div class="page-loading">Đang tra cứu…</div>'; try { const result = await api(`/tracking/${encodeURIComponent(code)}`); const history = (result.history || []).map(item => `<div class="tracking-step"><b>${badge(item.toStatus)}</b><span>${fmtDate(item.occurredAt)}</span></div>`).join(""); box.innerHTML = `<div class="section-gap"><div class="panel-head"><div><h3>Đơn ${esc(result.trackingCode)}</h3><p>Tạo lúc ${fmtDate(result.createdAt)}</p></div>${badge(result.status)}</div><div class="tracking-result"><div class="tracking-step"><b>Điểm lấy</b><span>${esc(result.pickup?.city || "Địa chỉ lấy hàng đã lưu")}</span></div><div class="tracking-step"><b>Điểm giao</b><span>${esc(result.dropoff?.city || "Địa chỉ giao hàng đã lưu")}</span></div></div><div class="section-gap"><h3>Lịch sử trạng thái</h3><div class="tracking-result">${history || "Chưa có lịch sử bổ sung."}</div></div></div>`; } catch (error) { box.innerHTML = `<div class="notice error">${esc(error.message)}</div>`; } }); }
   async function renderTasks(target) {
     const tasks = await safeGet("/drivers/me/tasks", []);
@@ -380,7 +398,6 @@
         showToast("Đã cập nhật vị trí GPS. Bạn có thể nhận phân công mới.");
         await renderView();
       }
-      else if (action === "pick-address-map") openAddressPicker(button.dataset.prefix, button.closest("form"));
       else if (action === "support") showToast("Kiểm tra README và docs/USER_GUIDE.md để xem hướng dẫn sử dụng.", "success");
       else if (action === "retry") await renderView();
     } catch (error) { button.disabled = false; showToast(error.message, "error"); }

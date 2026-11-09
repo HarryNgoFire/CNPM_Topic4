@@ -10,6 +10,7 @@ import { PricingService } from "../src/modules/pricing/pricing.service";
 import { ShipmentsService } from "../src/modules/shipments/shipments.service";
 import { DispatchService } from "../src/modules/dispatch/dispatch.service";
 import { WebhooksService } from "../src/modules/webhooks/webhooks.service";
+import { GeocodingService } from "../src/modules/geocoding/geocoding.service";
 const ids = {
   SENDER: "00000000-0000-4000-8000-000000000001",
   DRIVER: "00000000-0000-4000-8000-000000000002",
@@ -27,6 +28,16 @@ describe("HTTP contract with real JWT guard and validation", () => {
     quote: jest.fn().mockResolvedValue({ fee: 75300 }),
     listRules: jest.fn(),
     revise: jest.fn(),
+  };
+  const geocoding = {
+    search: jest.fn().mockResolvedValue([]),
+    reverse: jest.fn().mockResolvedValue({
+      label: "12 Nguyen Trai",
+      lat: 10.754,
+      lng: 106.663,
+      address: { line: "12 Nguyen Trai", ward: "1", district: "5", city: "HCMC" },
+      attribution: "Data © OpenStreetMap contributors",
+    }),
   };
   const shipments = {
     create: jest.fn(),
@@ -66,6 +77,8 @@ describe("HTTP contract with real JWT guard and validation", () => {
       .useValue({})
       .overrideProvider(WebhooksService)
       .useValue({})
+      .overrideProvider(GeocodingService)
+      .useValue(geocoding)
       .compile();
     app = module.createNestApplication();
     configure(app);
@@ -182,4 +195,13 @@ describe("HTTP contract with real JWT guard and validation", () => {
       .send(booking)
       .expect(403);
   });
+  it("rejects unauthorized geocoding search", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/geocoding/search?q=Nguyen%20Trai")
+      .expect(401));
+  it("permits authorized geocoding search", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/geocoding/search?q=Nguyen%20Trai")
+      .set("Authorization", "Bearer " + token("SENDER"))
+      .expect(200));
 });

@@ -460,27 +460,27 @@ controller.getBookingPayload()
 controller.destroy()
 ```
 
-- [ ] **Step 1: Write controller behavior tests**
+- [x] **Step 1: Write controller behavior tests**
 
   Cover GPS permission granted/denied, GPS auto-fills A once, manual A override, search result selection, reverse geocode after drag, A/B route rendering, quote distance/ETA/fee, coordinate preservation when text is unchanged, and coordinate invalidation only when the corresponding address is manually edited.
 
-- [ ] **Step 2: Add abortable search and quote clients**
+- [x] **Step 2: Add abortable search and quote clients**
 
   Search waits 350 ms and aborts the prior request. Quote aborts the prior request when A/B changes. An aborted response must never overwrite a newer route or address.
 
-- [ ] **Step 3: Replace the modal picker with one responsive map**
+- [x] **Step 3: Replace the modal picker with one responsive map**
 
   Mount one map in the shipment form; show draggable A/B markers, separate search controls, GPS-for-A action, route layer, km, ETA, fee, loading/error/empty states, and OSM attribution. Reuse valid coordinates when submitting.
 
-- [ ] **Step 4: Delete the Leaflet picker**
+- [x] **Step 4: Delete the Leaflet picker**
 
   Remove `pickerMap`, `openAddressPicker`, Leaflet checks, Esri URLs, and old Google navigation copy only after sender tests and manual flow pass. Grep must find no `Leaflet`, `window.L`, `arcgisonline`, or Esri runtime reference.
 
-- [ ] **Step 5: Verify sender acceptance**
+- [x] **Step 5: Verify sender acceptance**
 
   In a browser: select/search/drag A/B, see one A→B route, km, ETA and fee, submit without repinning, reload detail, and confirm persisted coordinates. Test 360×800 and 1440×900.
 
-- [ ] **Checkpoint:** `feat(sender-map): add A/B route and geocoding`
+- [x] **Checkpoint:** `feat(sender-map): add A/B route and geocoding`
 
 ### Task 9: Implement the driver two-stage trip controller
 
