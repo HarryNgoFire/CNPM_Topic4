@@ -45,33 +45,43 @@ Healthcheck endpoints:
 
 ---
 
-## 3. Dataset Maintenance & Ingestion
+## 3. Dataset Maintenance & Ingestion (HCMC Regional Extract)
 
-### Updating Regional OSM Data (Quarterly / Monthly Cadence)
+MoveFlow's self-hosted map stack is optimized for the **Ho Chi Minh City Metropolitan Area** (`bbox: 105.8,10.3,107.4,11.4`), reducing RAM from ~8.5 GB down to ~750 MB - 1.0 GB.
 
-1. **Download Extract**:
+### Regional Data Workflow
+
+1. **Preflight Check**:
    ```bash
-   curl -fL -o infra/maps/nominatim/data/vietnam-latest.osm.pbf \
-     https://download.geofabrik.de/asia/vietnam-latest.osm.pbf
+   node scripts/prepare-hcmc-map-data.mjs
    ```
 
-2. **Rebuild OSRM MLD Graph**:
+2. **Clip to HCMC Metro Bounding Box**:
    ```bash
-   docker run -t -v "$(pwd)/infra/maps/osrm/data:/data" \
+   docker run --rm -v "$(pwd)/infra/maps/nominatim/data:/data" \
+     stefda/osmium-tool:latest extract \
+     --bbox 105.8,10.3,107.4,11.4 \
+     /data/vietnam-latest.osm.pbf \
+     -o /data/hcmc-surroundings.osm.pbf --overwrite
+   ```
+
+3. **Rebuild OSRM MLD Graph**:
+   ```bash
+   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
      -v "$(pwd)/infra/maps/nominatim/data:/source:ro" \
      ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-extract \
-     -p /opt/car.lua /source/vietnam-latest.osm.pbf
+     -p /opt/car.lua /source/hcmc-surroundings.osm.pbf
 
-   mv infra/maps/osrm/data/vietnam-latest.osrm infra/maps/osrm/data/map.osrm
+   mv infra/maps/osrm/data/hcmc-surroundings.osrm infra/maps/osrm/data/map.osrm
 
-   docker run -t -v "$(pwd)/infra/maps/osrm/data:/data" \
+   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
      ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-partition /data/map.osrm
 
-   docker run -t -v "$(pwd)/infra/maps/osrm/data:/data" \
+   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
      ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-customize /data/map.osrm
    ```
 
-3. **Restart OSRM Container**:
+4. **Restart OSRM Container**:
    ```bash
    docker compose -f compose.yaml -f compose.maps.yaml restart osrm
    ```

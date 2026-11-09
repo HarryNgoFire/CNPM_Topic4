@@ -169,7 +169,11 @@ export class GeocodingService {
 
     const task = (async () => {
       const baseUrl = this.getBaseUrl();
-      const endpoint = `${baseUrl}/search?q=${encodeURIComponent(trimmed)}&format=jsonv2&addressdetails=1&limit=${boundLimit}&countrycodes=vn`;
+      const viewbox = (process.env.GEOCODER_VIEWBOX ?? "").trim();
+      let endpoint = `${baseUrl}/search?q=${encodeURIComponent(trimmed)}&format=jsonv2&addressdetails=1&limit=${boundLimit}&countrycodes=vn`;
+      if (viewbox) {
+        endpoint += `&viewbox=${encodeURIComponent(viewbox)}`;
+      }
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.getTimeoutMs());

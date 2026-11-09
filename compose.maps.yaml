@@ -1,11 +1,19 @@
 services:
   tileserver:
     image: maptiler/tileserver-gl:v4.11.0
-    command: ["-c", "/config/config.json"]
+    command: ["-c", "/config/config.json", "-p", "8080"]
     volumes:
       - ./infra/maps/tileserver/config.json:/config/config.json:ro
       - ./infra/maps/tileserver/styles:/config/styles:ro
       - ./infra/maps/tileserver/data:/data:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 384M
+        reservations:
+          cpus: "0.2"
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/health || exit 1"]
       interval: 10s
@@ -15,9 +23,17 @@ services:
 
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v5.27.1
-    command: ["osrm-routed", "--algorithm", "mld", "/data/map.osrm"]
+    command: ["osrm-routed", "--algorithm", "mld", "--max-matching-size", "100", "--max-table-size", "100", "/data/map.osrm"]
     volumes:
       - ./infra/maps/osrm/data:/data:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 512M
+        reservations:
+          cpus: "0.2"
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/127.0.0.1/5000 || exit 1"]
       interval: 10s
@@ -29,9 +45,21 @@ services:
     image: mediagis/nominatim:5.3
     environment:
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-nominatim}
+      POSTGRESQL_SHARED_BUFFERS: 256MB
+      POSTGRESQL_WORK_MEM: 16MB
+      POSTGRESQL_MAINTENANCE_WORK_MEM: 128MB
+      POSTGRESQL_EFFECTIVE_CACHE_SIZE: 512MB
     volumes:
       - nominatim_data:/var/lib/postgresql/16/main
       - ./infra/maps/nominatim/data:/data:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1280M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/status || exit 1"]
       interval: 15s
