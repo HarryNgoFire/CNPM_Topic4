@@ -501,31 +501,31 @@ await controller.mount()
 controller.destroy()
 ```
 
-- [ ] **Step 1: Write phase UI tests**
+- [x] **Step 1: Write phase UI tests**
 
   `TO_PICKUP` draws driver→A and never B; `AT_PICKUP` removes route and offers pickup confirmation; `TO_DROPOFF` draws driver→B; `AT_DROPOFF` offers delivery confirmation; terminal states stop tracking. A client-crafted phase/destination is never sent to transition endpoints.
 
-- [ ] **Step 2: Write GPS throttle/reroute tests**
+- [x] **Step 2: Write GPS throttle/reroute tests**
 
   Upload at most every 5 seconds and 15 m, plus one 60-second stationary heartbeat. Re-fetch route only on destination/state change, first route, or more than 75 m off route after 20 seconds. Network loss queues only the latest unsent point; reconnect never replays stale points.
 
-- [ ] **Step 3: Implement lifecycle-aware tracking**
+- [x] **Step 3: Implement lifecycle-aware tracking**
 
   Start `watchPosition` only for an accepted active task. Stop it on controller destroy, logout, hidden/terminated task, permission loss, or terminal response. Show accuracy and last successful server update time.
 
-- [ ] **Step 4: Bind backend-controlled transitions**
+- [x] **Step 4: Bind backend-controlled transitions**
 
   Arrival buttons stay disabled until backend `arrival.eligible` is true. Confirmation calls the requested next state, refreshes server navigation, swaps route sources, and never locally advances the phase before success.
 
-- [ ] **Step 5: Avoid whole-view rerenders**
+- [x] **Step 5: Avoid whole-view rerenders**
 
   GPS and route changes update MapLibre sources and specific text/button nodes only. The existing 15-second `renderView()` task replacement must not run while a mounted trip controller owns the view.
 
-- [ ] **Step 6: Verify driver acceptance**
+- [x] **Step 6: Verify driver acceptance**
 
   Browser test: accept → GPS→A only → arrive A → confirm pickup → GPS→B only → arrive B → deliver → watch stops and driver becomes available. Confirm route B cannot be obtained before pickup by calling APIs directly.
 
-- [ ] **Checkpoint:** `feat(driver-map): add guarded two-stage navigation`
+- [x] **Checkpoint:** `feat(driver-map): add guarded two-stage navigation`
 
 ### Task 10: Add authorized sender live tracking and synchronize related views
 

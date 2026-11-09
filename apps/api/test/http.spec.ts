@@ -44,6 +44,13 @@ describe("HTTP contract with real JWT guard and validation", () => {
     list: jest.fn(),
     get: jest.fn(),
     transition: jest.fn(),
+    navigation: jest.fn().mockResolvedValue({
+      phase: "TO_PICKUP",
+      shipmentStatus: "EN_ROUTE_PICKUP",
+      destination: { kind: "PICKUP", lat: 10.75, lng: 106.66 },
+      route: { distanceM: 1000, durationS: 120, geometry: { type: "LineString", coordinates: [] } },
+      arrival: { eligible: false, distanceM: 500 },
+    }),
     tracking: jest.fn().mockResolvedValue({
       trackingCode: "ABCDEF1234567890",
       status: "RECEIVED",
@@ -203,5 +210,14 @@ describe("HTTP contract with real JWT guard and validation", () => {
     request(app.getHttpServer())
       .get("/api/v1/geocoding/search?q=Nguyen%20Trai")
       .set("Authorization", "Bearer " + token("SENDER"))
+      .expect(200));
+  it("rejects unauthorized navigation request", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/shipments/00000000-0000-4000-8000-000000000001/navigation")
+      .expect(401));
+  it("permits authorized driver to fetch navigation", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/shipments/00000000-0000-4000-8000-000000000001/navigation")
+      .set("Authorization", "Bearer " + token("DRIVER"))
       .expect(200));
 });
