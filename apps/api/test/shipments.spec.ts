@@ -132,6 +132,7 @@ describe("Shipment state machine and ownership", () => {
       pickupAddressId: "pickup-id",
       dropoffAddressId: "dropoff-id",
     });
+    db.driverAssignment.findFirst.mockResolvedValue({ id: "assignment-1" });
     db.$queryRaw.mockResolvedValue([
       {
         pickupLat: 10.754,
@@ -141,10 +142,7 @@ describe("Shipment state machine and ownership", () => {
       },
     ]);
 
-    const result = await service.get("ship", {
-      sub: "sender",
-      role: "SENDER",
-    });
+    const result = await service.get("ship", actor);
     const pickupUrl = new URL(result.navigationUrls!.pickup);
     const dropoffUrl = new URL(result.navigationUrls!.dropoff);
     expect(pickupUrl.searchParams.get("destination")).toBe("10.754,106.663");

@@ -8,6 +8,7 @@
     "dev": "node --watch -r ts-node/register src/main.ts",
     "start": "node dist/main.js",
     "test": "jest --runInBand --testPathIgnorePatterns=integration",
+    "test:baseline": "jest --runInBand --no-cache --testPathIgnorePatterns=integration",
     "test:coverage": "jest --runInBand --coverage --testPathIgnorePatterns=integration",
     "test:integration": "jest --runInBand --config jest.integration.config.cjs"
   },

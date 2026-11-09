@@ -13,6 +13,7 @@
     "dev:api": "npm run dev -w apps/api",
     "start": "npm run start -w apps/api",
     "test": "npm run test -w apps/api",
+    "test:baseline": "npm run test:baseline -w apps/api",
     "test:coverage": "npm run test:coverage -w apps/api",
     "test:integration": "npm run test:integration -w apps/api",
     "typecheck": "npm run typecheck -w apps/api",

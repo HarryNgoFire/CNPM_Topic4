@@ -79,7 +79,7 @@ describe("QA: RBAC matrix (15 endpoints x anonymous + 4 roles)", () => {
   beforeEach(() => {
     db.user.findUnique.mockImplementation(async ({ where }: any) => {
       const role = ROLES.find((r) => ids[r] === where.id);
-      return role ? { id: where.id, role, active: true } : null;
+      return role ? { id: where.id, role, active: true, emailVerified: true } : null;
     });
   });
 

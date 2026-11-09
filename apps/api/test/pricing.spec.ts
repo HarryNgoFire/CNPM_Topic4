@@ -55,6 +55,7 @@ describe("Pricing API service", () => {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   db.$transaction = (fn: any) => fn(db);
   const routing = { getDistance: jest.fn() };
