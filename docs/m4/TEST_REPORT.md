@@ -9,6 +9,7 @@
 | Nhánh | `feature/m4-testing` (tách từ `feature/m2-backend-services`, đã gồm 9 migration của M3) |
 | Môi trường | Windows PowerShell 5.1, Node v24.22.0 (CI/Docker dùng 22.22.3), npm 11.19.1, Docker 29.8.2, Compose v5.6.0 |
 | Người chạy | M4 |
+| Pull Request | [#5](https://github.com/HarryNgoFire/CNPM_Topic4/pull/5) (nhắm vào nhánh `feature/m2-backend-services`) |
 
 Phạm vi: kiểm thử từ dưới lên: Database (M3) → Backend trên Database (M2 + M3) → Backend (M2). Tầng giao diện (M1) chưa thực hiện vì repo chưa có frontend.
 
@@ -50,6 +51,7 @@ Giới hạn của kiểm tra: dòng "không xóa user có đơn" thực tế b�
 | Test unit + HTTP của M2 | 105 pass (xác nhận con số M2 ghi) |
 | Test QA bổ sung của M4 | **118 pass** |
 | **Tổng** | **223 test pass, 9 suite** |
+| CI GitHub Actions (nhánh M4) | Pass: run #9 (push, 2m5s) và run #10 (Pull Request #5, 1m44s) |
 
 Test QA của M4:
 
@@ -99,9 +101,9 @@ Chưa thực hiện: repo chưa có frontend (`apps/web`). Kế hoạch: viết 
 
 | ID | Mức độ | Mô tả | Issue | Trạng thái |
 |---|---|---|---|---|
-| B01 | Trung bình | Lần chạy Compose đầu tiên: `migrate` lỗi `ECONNREFUSED`, `api` không khởi động. Nghi ngờ do healthcheck `pg_isready` kiểm tra qua unix socket nên báo `healthy` khi TCP chưa mở. Gợi ý: `pg_isready -h 127.0.0.1 ...`. Workaround: chạy `up -d` lần hai | `#<số>` | Open |
-| B02 | Thấp–Trung bình | Đăng ký trùng URL tạo nhiều subscription; mỗi event có 2 delivery (đã xác nhận trên DB: 2 subscription, mỗi event 2 delivery). Receiver deduplicate nên không thấy | `#<số>` | Open |
-| B03 | Thấp (tài liệu) | Webhook đến sai thứ tự so với `occurredAt` (quan sát ở cả hai đơn), tài liệu chưa nói rõ không đảm bảo thứ tự | `#<số>` | Open |
+| B01 | Trung bình | Lần chạy Compose đầu tiên: `migrate` lỗi `ECONNREFUSED`, `api` không khởi động. Nghi ngờ do healthcheck `pg_isready` kiểm tra qua unix socket nên báo `healthy` khi TCP chưa mở. Gợi ý: `pg_isready -h 127.0.0.1 ...`. Workaround: chạy `up -d` lần hai | [#2](https://github.com/HarryNgoFire/CNPM_Topic4/issues/2) | Open |
+| B02 | Thấp–Trung bình | Đăng ký trùng URL tạo nhiều subscription; mỗi event có 2 delivery (đã xác nhận trên DB: 2 subscription, mỗi event 2 delivery). Receiver deduplicate nên không thấy | [#3](https://github.com/HarryNgoFire/CNPM_Topic4/issues/3) | Open |
+| B03 | Thấp (tài liệu) | Webhook đến sai thứ tự so với `occurredAt` (quan sát ở cả hai đơn), tài liệu chưa nói rõ không đảm bảo thứ tự | [#4](https://github.com/HarryNgoFire/CNPM_Topic4/issues/4) | Open |
 | D01 | Thấp (tài liệu) | README của M3 ghi 22 integration test, thực tế 23 | — | Ghi nhận |
 | D02 | Thấp | `npm ci` không tự tạo Prisma Client, người mới gặp lỗi TypeScript khó hiểu. Gợi ý `postinstall: prisma generate` hoặc ghi rõ trong README | — | Ghi nhận |
 | D03 | Thấp–Trung bình | Coverage tiêu đề (99,5%) không đo state machine (`shipments.service.ts`), `auth.service.ts` và `security.ts`. Khi đo đủ, `auth.service.ts` chỉ đạt 30% ở mức unit test. Gợi ý mở rộng `collectCoverageFrom` | — | Đã bổ sung test, chờ M2 mở rộng cấu hình |
