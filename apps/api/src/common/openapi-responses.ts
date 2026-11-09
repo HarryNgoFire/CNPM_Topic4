@@ -25,14 +25,29 @@ export function addResponseContracts(doc: OpenAPIObject) {
       ruleId: uuid,
       ruleVersion: { type: "integer" },
       distanceKm: money,
+      distanceMeters: money,
+      durationSeconds: { type: "integer" },
+      geometry: {
+        type: "object",
+        properties: {
+          type: { type: "string", const: "LineString" },
+          coordinates: {
+            type: "array",
+            items: {
+              type: "array",
+              items: { type: "number" },
+              minItems: 2,
+              maxItems: 2,
+            },
+          },
+        },
+        required: ["type", "coordinates"],
+      },
+      source: { type: "string", const: "OSRM" },
+      profile: { type: "string", const: "driving" },
       distanceSource: {
         type: "string",
-        enum: [
-          "OSRM_DRIVING",
-          "GOOGLE_ROUTES_TWO_WHEELER",
-          "GOOGLE_ROUTES_DRIVE",
-          "POSTGIS_GEODESIC_FALLBACK",
-        ],
+        enum: ["OSRM_DRIVING"],
       },
       baseFee: money,
       distanceFee: money,

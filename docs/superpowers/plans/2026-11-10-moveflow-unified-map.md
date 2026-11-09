@@ -152,31 +152,31 @@ export type RouteResult = {
 RoutingService.getRoute(points: readonly PointDto[]): Promise<RouteResult>
 ```
 
-- [ ] **Step 1: Write failing routing contract tests**
+- [x] **Step 1: Write failing routing contract tests**
 
   Cover two and three waypoints, OSRM `lng,lat` ordering, `geometries=geojson`, `overview=full`, distance/duration/LineString parsing, snap distance above 250 m, invalid JSON, `NoRoute`, timeout, retryable 503 followed by success, non-retryable 400, exact-route cache hit, and bounded eviction.
 
-- [ ] **Step 2: Run the focused test**
+- [x] **Step 2: Run the focused test**
 
   Run `npm test -w apps/api -- --runTestsByPath test/routing.spec.ts --runInBand --no-cache`. Expected: FAIL because `RoutingService` does not exist.
 
-- [ ] **Step 3: Implement the minimum OSRM adapter**
+- [x] **Step 3: Implement the minimum OSRM adapter**
 
   Validate 2–10 finite WGS84 points; request one OSRM route with no fallback; convert geometry only at the boundary; coalesce concurrent identical cache misses; apply the fixed timeout/retry/cache limits. Do not expose `OSRM_BASE_URL` or upstream bodies to clients.
 
-- [ ] **Step 4: Route pricing through the new service**
+- [x] **Step 4: Route pricing through the new service**
 
   Keep the existing fee formula and snapshot fields; add `distanceMeters`, `durationSeconds`, `geometry`, `source`, and `profile` to the quote response. `distanceKm` must equal `distanceMeters / 1000` from the same result.
 
-- [ ] **Step 5: Remove old route implementations**
+- [x] **Step 5: Remove old route implementations**
 
   Grep the whole repo for `OsrmRoutingService`, `GoogleRoutesService`, `buildGoogleMapsDirectionsUrl`, `GOOGLE_MAPS_`, and Google Maps URLs. Delete old code only after zero production callers remain.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
   Run focused routing/pricing tests, then `npm run typecheck && npm run lint && npm run test:baseline`. Expected: all pass.
 
-- [ ] **Checkpoint:** `refactor(map): unify routing on OSRM`
+- [x] **Checkpoint:** `refactor(map): unify routing on OSRM`
 
 ### Task 3: Add a backward-compatible delivery state machine
 
