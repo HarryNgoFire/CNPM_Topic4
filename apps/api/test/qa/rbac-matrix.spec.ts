@@ -29,7 +29,7 @@ const ENDPOINTS: [string, string, Role[]][] = [
   ["post", "/shipments", ["SENDER", "ADMIN"]],
   ["get", "/shipments", ["SENDER", "ADMIN", "DISPATCHER"]],
   ["get", "/shipments/:id", ["SENDER", "ADMIN", "DISPATCHER", "DRIVER"]],
-  ["post", "/shipments/:id/transition", ["DRIVER", "ADMIN"]],
+  ["post", "/shipments/:id/transition", ["DRIVER", "ADMIN", "SENDER"]],
   ["post", "/shipments/:id/assign-driver", ["DISPATCHER", "ADMIN"]],
   ["post", "/assignments/:id/respond", ["DRIVER"]],
   ["get", "/dispatch/queue", ["DISPATCHER", "ADMIN"]],

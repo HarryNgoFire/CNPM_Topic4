@@ -11,6 +11,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
 import { PointDto } from "../../common/dto";
 import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
+import { WebhooksService } from "../webhooks/webhooks.service";
 function setting(name: string, fallback: number) {
   const v = Number(process.env[name] ?? fallback);
   if (!Number.isFinite(v) || v <= 0) throw new Error(`Invalid ${name}`);
@@ -20,7 +21,10 @@ function setting(name: string, fallback: number) {
 export class DispatchService {
   private running = false;
   private readonly logger = new Logger(DispatchService.name);
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly events: WebhooksService,
+  ) {}
   async assign(shipmentId: string, preferredDriverId?: string) {
     try {
       return await this.db.$transaction(async (tx) => {
@@ -127,10 +131,40 @@ export class DispatchService {
         });
         if (driver.status !== "AVAILABLE")
           throw new ConflictException("Driver is not available");
+
+        const shipment = await tx.shipment.findUniqueOrThrow({
+          where: { id: initial.shipmentId },
+        });
+        if (shipment.status !== "RECEIVED")
+          throw new ConflictException(
+            "Shipment is no longer awaiting assignment",
+          );
+
         await tx.driver.update({
           where: { id: driver.id },
           data: { status: "BUSY" },
         });
+
+        await tx.shipment.update({
+          where: { id: shipment.id },
+          data: { status: "EN_ROUTE_PICKUP" },
+        });
+
+        await tx.shipmentStatusHistory.create({
+          data: {
+            shipmentId: shipment.id,
+            fromStatus: "RECEIVED",
+            toStatus: "EN_ROUTE_PICKUP",
+            changedBy: actor.sub,
+          },
+        });
+
+        await this.events.record(
+          tx,
+          { id: shipment.id, trackingCode: shipment.trackingCode },
+          "RECEIVED",
+          "EN_ROUTE_PICKUP",
+        );
       }
       const updated = await tx.driverAssignment.update({
         where: { id },

@@ -12,7 +12,12 @@ describe("Driver dispatch", () => {
     driver: { userId: actor.sub, status: "AVAILABLE" },
   };
   const db: any = {
-    shipment: { findUnique: jest.fn(), findMany: jest.fn() },
+    shipment: {
+      findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
     driverAssignment: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -27,17 +32,30 @@ describe("Driver dispatch", () => {
       findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
     },
+    shipmentStatusHistory: {
+      create: jest.fn(),
+    },
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
   };
   db.$transaction = (fn: any) => fn(db);
-  const service = new DispatchService(db as PrismaService);
+  const events: any = { record: jest.fn() };
+  const service = new DispatchService(db as PrismaService, events);
   beforeEach(() => {
     jest.clearAllMocks();
     db.shipment.findUnique.mockResolvedValue({
       id: "shipment",
       status: "RECEIVED",
       pickupAddressId: "address",
+    });
+    db.shipment.findUniqueOrThrow.mockResolvedValue({
+      id: "shipment",
+      status: "RECEIVED",
+      pickupAddressId: "address",
+    });
+    db.shipment.update.mockResolvedValue({
+      id: "shipment",
+      status: "EN_ROUTE_PICKUP",
     });
     db.driverAssignment.findFirst.mockResolvedValue(null);
     db.driverAssignment.findMany.mockResolvedValue([]);
@@ -108,13 +126,30 @@ describe("Driver dispatch", () => {
       "already assigned",
     );
   });
-  it("accepts and sets driver BUSY without changing shipment status", async () => {
+  it("accepts, sets driver BUSY, and transitions shipment to EN_ROUTE_PICKUP", async () => {
     const result = await service.respond("assignment", "ACCEPT", actor);
     expect(result.assignment.status).toBe("ACCEPTED");
     expect(db.driver.update).toHaveBeenCalledWith({
       where: { id: "driver" },
       data: { status: "BUSY" },
     });
+    expect(db.shipment.update).toHaveBeenCalledWith({
+      where: { id: "shipment" },
+      data: { status: "EN_ROUTE_PICKUP" },
+    });
+    expect(db.shipmentStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        shipmentId: "shipment",
+        fromStatus: "RECEIVED",
+        toStatus: "EN_ROUTE_PICKUP",
+      }),
+    });
+    expect(events.record).toHaveBeenCalledWith(
+      db,
+      expect.anything(),
+      "RECEIVED",
+      "EN_ROUTE_PICKUP",
+    );
   });
   it("rejects and finds a new driver", async () => {
     const spy = jest.spyOn(service, "assign").mockResolvedValue({} as any);

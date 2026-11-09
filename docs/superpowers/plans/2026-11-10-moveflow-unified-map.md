@@ -203,31 +203,31 @@ type ShipmentTransitionRequest = {
 };
 ```
 
-- [ ] **Step 1: Write the failing transition matrix**
+- [x] **Step 1: Write the failing transition matrix**
 
   Assert the normal chain `RECEIVED → EN_ROUTE_PICKUP → ARRIVED_PICKUP → OUT_FOR_DELIVERY → ARRIVED_DROPOFF → DELIVERED`; reject all skips. Assert legacy `IN_TRANSIT → OUT_FOR_DELIVERY`, terminal idempotency, sender cancellation only before acceptance, admin cancellation of nonterminal shipments, and driver failure only during delivery. Require and persist a bounded reason for `CANCELLED` and `DELIVERY_FAILED`; reject a reason on ordinary progress transitions.
 
-- [ ] **Step 2: Add a non-destructive enum migration**
+- [x] **Step 2: Add a non-destructive enum migration**
 
   Add enum values only. Do not remove `IN_TRANSIT`, update old history, truncate data, or rewrite fee snapshots. Add SQL comments documenting the compatibility rule.
 
-- [ ] **Step 3: Move accept into the shipment lifecycle transaction**
+- [x] **Step 3: Move accept into the shipment lifecycle transaction**
 
   On the first successful assignment acceptance, atomically set driver `BUSY`, assignment `ACCEPTED`, shipment `EN_ROUTE_PICKUP`, history, and outbox. The same request repeated must return idempotently without a second history/event.
 
-- [ ] **Step 4: Centralize terminal cleanup**
+- [x] **Step 4: Centralize terminal cleanup**
 
   `DELIVERED`, `CANCELLED`, and `DELIVERY_FAILED` must resolve the active assignment and release the driver in the same transaction. Preserve the existing row locks and partial unique indexes.
 
-- [ ] **Step 5: Verify old and new rows**
+- [x] **Step 5: Verify old and new rows**
 
   Integration tests create representative legacy states without changing existing history, then prove each has a valid next action or terminal display path.
 
-- [ ] **Step 6: Run gates**
+- [x] **Step 6: Run gates**
 
   Run state/dispatch/shipment unit tests and, only against an isolated disposable test database, `npm run test:integration`. Expected: all pass and no non-test database is touched.
 
-- [ ] **Checkpoint:** `feat(shipments): add two-stage delivery lifecycle`
+- [x] **Checkpoint:** `feat(shipments): add two-stage delivery lifecycle`
 
 ### Task 4: Validate and throttle driver GPS at the backend
 

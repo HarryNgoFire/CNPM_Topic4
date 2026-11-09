@@ -199,7 +199,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .post(`assignments/${assignment.id}/respond`)
       .send({ action: "ACCEPT" })
       .expect(200);
-    for (const toStatus of ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"])
+    for (const toStatus of ["ARRIVED_PICKUP", "OUT_FOR_DELIVERY", "ARRIVED_DROPOFF", "DELIVERED"])
       await call("driverA")
         .post(`shipments/${shipment.id}/transition`)
         .send({ toStatus })
@@ -207,7 +207,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     const tracking = await request(app.getHttpServer())
       .get("/api/v1/tracking/" + shipment.trackingCode)
       .expect(200);
-    expect(tracking.body.history).toHaveLength(4);
+    expect(tracking.body.history).toHaveLength(6);
     expect(tracking.body).not.toHaveProperty("senderId");
     expect(tracking.body.pickup).toEqual({ city: "HCMC" });
     expect(
@@ -220,10 +220,10 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       }),
     ).toBe(1);
     await webhooks.sendBatch();
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(6);
     expect(
       await db.webhookDelivery.count({ where: { status: "DELIVERED" } }),
-    ).toBe(4);
+    ).toBe(6);
   });
   it("calculates zero-distance quote and geography distance in metres", async () => {
     const quote = await call("sender")
@@ -355,17 +355,17 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .expect(200);
     const actor = { sub: users.driverA.id, role: "DRIVER" as const };
     await Promise.all([
-      shipments.transition(shipment.id, "IN_TRANSIT", actor),
-      shipments.transition(shipment.id, "IN_TRANSIT", actor),
+      shipments.transition(shipment.id, "ARRIVED_PICKUP", actor),
+      shipments.transition(shipment.id, "ARRIVED_PICKUP", actor),
     ]);
     expect(
       await db.shipmentStatusHistory.count({
-        where: { shipmentId: shipment.id, toStatus: "IN_TRANSIT" },
+        where: { shipmentId: shipment.id, toStatus: "ARRIVED_PICKUP" },
       }),
     ).toBe(1);
     expect(
       await db.webhookEvent.count({ where: { shipmentId: shipment.id } }),
-    ).toBe(2);
+    ).toBe(3);
   });
   it("blocks skipped status and unauthorized driver", async () => {
     const shipment = await create();
@@ -510,17 +510,17 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     try {
       await call("driverA")
         .post(`shipments/${shipment.id}/transition`)
-        .send({ toStatus: "IN_TRANSIT" })
+        .send({ toStatus: "ARRIVED_PICKUP" })
         .expect(500);
       expect(
         (await db.shipment.findUniqueOrThrow({ where: { id: shipment.id } }))
           .status,
-      ).toBe("RECEIVED");
+      ).toBe("EN_ROUTE_PICKUP");
       expect(
         await db.shipmentStatusHistory.count({
           where: { shipmentId: shipment.id },
         }),
-      ).toBe(1);
+      ).toBe(2);
     } finally {
       spy.mockRestore();
     }
@@ -562,5 +562,35 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .send({ driverId: drivers.driverB.id })
       .expect(200);
     expect(manuallyAssigned.body.driverId).toBe(drivers.driverB.id);
+  });
+  it("supports legacy IN_TRANSIT shipment progressing through state machine", async () => {
+    const shipment = await create();
+    const assignment = await pending(shipment.id);
+    await call("driverA")
+      .post(`assignments/${assignment.id}/respond`)
+      .send({ action: "ACCEPT" })
+      .expect(200);
+    await db.shipment.update({
+      where: { id: shipment.id },
+      data: { status: "IN_TRANSIT" },
+    });
+    for (const toStatus of [
+      "OUT_FOR_DELIVERY",
+      "ARRIVED_DROPOFF",
+      "DELIVERED",
+    ]) {
+      await call("driverA")
+        .post(`shipments/${shipment.id}/transition`)
+        .send({ toStatus })
+        .expect(200);
+    }
+    const finalShipment = await db.shipment.findUniqueOrThrow({
+      where: { id: shipment.id },
+    });
+    expect(finalShipment.status).toBe("DELIVERED");
+    expect(
+      (await db.driver.findUniqueOrThrow({ where: { id: drivers.driverA.id } }))
+        .status,
+    ).toBe("AVAILABLE");
   });
 });

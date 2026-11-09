@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -12,15 +13,27 @@ import { AddressDto, BookingDto, ShipmentPageDto } from "../../common/dto";
 import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
-export function canTransition(current: ShipmentStatus, next: ShipmentStatus) {
-  const states: ShipmentStatus[] = [
-    "RECEIVED",
-    "IN_TRANSIT",
-    "OUT_FOR_DELIVERY",
-    "DELIVERED",
-  ];
-  const from = states.indexOf(current);
-  return from >= 0 && states.indexOf(next) === from + 1;
+
+const VALID_TRANSITIONS = new Set<string>([
+  "RECEIVED>EN_ROUTE_PICKUP",
+  "EN_ROUTE_PICKUP>ARRIVED_PICKUP",
+  "ARRIVED_PICKUP>OUT_FOR_DELIVERY",
+  "OUT_FOR_DELIVERY>ARRIVED_DROPOFF",
+  "ARRIVED_DROPOFF>DELIVERED",
+  "IN_TRANSIT>OUT_FOR_DELIVERY",
+  "OUT_FOR_DELIVERY>DELIVERY_FAILED",
+  "ARRIVED_DROPOFF>DELIVERY_FAILED",
+  "IN_TRANSIT>DELIVERY_FAILED",
+  "RECEIVED>CANCELLED",
+  "EN_ROUTE_PICKUP>CANCELLED",
+  "ARRIVED_PICKUP>CANCELLED",
+  "IN_TRANSIT>CANCELLED",
+  "OUT_FOR_DELIVERY>CANCELLED",
+  "ARRIVED_DROPOFF>CANCELLED",
+]);
+
+export function canTransition(current: ShipmentStatus, next: ShipmentStatus): boolean {
+  return VALID_TRANSITIONS.has(`${current}>${next}`);
 }
 @Injectable()
 export class ShipmentsService {
@@ -167,48 +180,149 @@ export class ShipmentsService {
     if (!shipment) throw new NotFoundException("Tracking code not found");
     return shipment;
   }
-  async transition(id: string, next: ShipmentStatus, actor: Actor) {
+  async transition(
+    id: string,
+    requestOrNext: ShipmentStatus | { toStatus: ShipmentStatus; reason?: string },
+    actor: Actor,
+  ) {
+    const toStatus: ShipmentStatus =
+      typeof requestOrNext === "string" ? requestOrNext : requestOrNext.toStatus;
+    const rawReason =
+      typeof requestOrNext === "object" && requestOrNext !== null
+        ? requestOrNext.reason
+        : undefined;
+    const trimmedReason =
+      typeof rawReason === "string" ? rawReason.trim() : undefined;
+
     return this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Shipment" WHERE id=${id}::uuid FOR UPDATE`;
       const shipment = await tx.shipment.findUnique({ where: { id } });
       if (!shipment) throw new NotFoundException();
-      const assignment = await tx.driverAssignment.findFirst({
-        where: { shipmentId: id, status: { in: ["ACCEPTED", "COMPLETED"] } },
+
+      const activeAssignment = await tx.driverAssignment.findFirst({
+        where: {
+          shipmentId: id,
+          status: { in: ["PENDING", "ACCEPTED"] },
+        },
         include: { driver: true },
       });
-      if (
-        actor.role !== "ADMIN" &&
-        (!assignment || assignment.driver.userId !== actor.sub)
-      )
+
+      const acceptedAssignment =
+        activeAssignment?.status === "ACCEPTED" ? activeAssignment : null;
+
+      // Ownership and role checks
+      if (actor.role === "SENDER") {
+        if (shipment.senderId !== actor.sub) {
+          throw new ForbiddenException();
+        }
+        if (toStatus !== "CANCELLED") {
+          throw new ForbiddenException("Senders can only cancel shipments");
+        }
+        if (shipment.status !== "RECEIVED" || acceptedAssignment) {
+          throw new ConflictException(
+            "Sender can only cancel unassigned shipments awaiting pickup",
+          );
+        }
+      } else if (actor.role === "DRIVER") {
+        if (toStatus === "CANCELLED") {
+          throw new ForbiddenException("Drivers cannot cancel shipments");
+        }
+        if (
+          !acceptedAssignment ||
+          acceptedAssignment.driver.userId !== actor.sub
+        ) {
+          throw new ForbiddenException();
+        }
+        if (toStatus === "DELIVERY_FAILED") {
+          if (
+            !["OUT_FOR_DELIVERY", "ARRIVED_DROPOFF", "IN_TRANSIT"].includes(
+              shipment.status,
+            )
+          ) {
+            throw new ConflictException(
+              "Delivery failure only permitted during delivery stages",
+            );
+          }
+        }
+      } else if (actor.role === "ADMIN") {
+        if (toStatus !== "CANCELLED" && !acceptedAssignment) {
+          throw new ConflictException("No accepted driver");
+        }
+      } else {
         throw new ForbiddenException();
-      if (shipment.status === next) return { ...shipment, idempotent: true };
-      if (!canTransition(shipment.status, next))
+      }
+
+      // Idempotency: if already in the target status, return immediately
+      if (shipment.status === toStatus) return { ...shipment, idempotent: true };
+
+      if (!canTransition(shipment.status, toStatus)) {
         throw new ConflictException("Invalid status transition");
-      if (!assignment || assignment.status !== "ACCEPTED")
-        throw new ConflictException("No accepted driver");
+      }
+
+      // Validate reason presence and bounds
+      if (toStatus === "CANCELLED" || toStatus === "DELIVERY_FAILED") {
+        if (
+          !trimmedReason ||
+          trimmedReason.length < 1 ||
+          trimmedReason.length > 255
+        ) {
+          throw new BadRequestException(
+            `Reason is required for ${toStatus} (1-255 characters)`,
+          );
+        }
+      } else {
+        if (trimmedReason !== undefined && trimmedReason.length > 0) {
+          throw new BadRequestException(
+            `Reason is not allowed for status ${toStatus}`,
+          );
+        }
+      }
+
       const updated = await tx.shipment.update({
         where: { id },
-        data: { status: next },
+        data: {
+          status: toStatus,
+          reason:
+            toStatus === "CANCELLED" || toStatus === "DELIVERY_FAILED"
+              ? trimmedReason
+              : null,
+        },
       });
+
       await tx.shipmentStatusHistory.create({
         data: {
           shipmentId: id,
           fromStatus: shipment.status,
-          toStatus: next,
+          toStatus,
           changedBy: actor.sub,
+          reason:
+            toStatus === "CANCELLED" || toStatus === "DELIVERY_FAILED"
+              ? trimmedReason
+              : null,
         },
       });
-      await this.events.record(tx, updated, shipment.status, next);
-      if (next === "DELIVERED") {
-        await tx.driverAssignment.update({
-          where: { id: assignment.id },
-          data: { status: "COMPLETED" },
-        });
-        await tx.driver.update({
-          where: { id: assignment.driverId },
-          data: { status: "AVAILABLE" },
-        });
+
+      await this.events.record(tx, updated, shipment.status, toStatus);
+
+      // Centralized terminal cleanup: DELIVERED, CANCELLED, DELIVERY_FAILED
+      if (
+        toStatus === "DELIVERED" ||
+        toStatus === "CANCELLED" ||
+        toStatus === "DELIVERY_FAILED"
+      ) {
+        if (activeAssignment) {
+          await tx.driverAssignment.update({
+            where: { id: activeAssignment.id },
+            data: { status: "COMPLETED" },
+          });
+          await tx.$queryRaw`SELECT id FROM "Driver" WHERE id=${activeAssignment.driverId}::uuid FOR UPDATE`;
+          await tx.driver.update({
+            where: { id: activeAssignment.driverId },
+            data: { status: "AVAILABLE" },
+          });
+        }
       }
+
       return updated;
     });
   }

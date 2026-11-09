@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 import {
   IsEnum,
   IsLatitude,
@@ -83,6 +83,18 @@ export class TransitionDto {
   @ApiProperty({ enum: ShipmentStatus })
   @IsEnum(ShipmentStatus)
   toStatus!: ShipmentStatus;
+
+  @ApiPropertyOptional({
+    description: "Required for CANCELLED and DELIVERY_FAILED; 1-255 characters",
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  reason?: string;
 }
 export class DriverStatusDto {
   @ApiProperty({ enum: ["AVAILABLE", "OFFLINE"] })
