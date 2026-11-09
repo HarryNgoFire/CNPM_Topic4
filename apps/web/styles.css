@@ -27,3 +27,32 @@
   padding: 0 !important;
   margin: 0 !important;
 }
+
+/* MoveFlow MapLibre Engine & Interactive Map Styles */
+.moveflow-map-container {
+  width: 100%;
+  height: 380px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  position: relative;
+  background: #f1f4f9;
+}
+.moveflow-marker {
+  user-select: none;
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+.moveflow-marker:active {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+.moveflow-marker-driver {
+  cursor: default;
+  animation: pulse-driver 2s infinite;
+}
+@keyframes pulse-driver {
+  0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.6), 0 2px 6px rgba(0,0,0,0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(37,99,235,0), 0 2px 6px rgba(0,0,0,0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(37,99,235,0), 0 2px 6px rgba(0,0,0,0.35); }
+}

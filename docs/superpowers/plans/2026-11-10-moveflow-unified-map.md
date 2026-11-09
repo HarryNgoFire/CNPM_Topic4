@@ -413,31 +413,31 @@ engine.resize()
 engine.destroy()
 ```
 
-- [ ] **Step 1: Add MapLibre as the one necessary dependency**
+- [x] **Step 1: Add MapLibre as the one necessary dependency**
 
   Pin an exact compatible version in the lockfile. `sync-web-vendor.mjs` copies only the distributable JS/CSS/license; it must fail if the installed version differs from the pinned version.
 
-- [ ] **Step 2: Test pure map math**
+- [x] **Step 2: Test pure map math**
 
   Using `node:test`, cover haversine movement, point-to-LineString distance, empty/one-point geometry, antimeridian-safe longitude normalization, and 75 m off-route threshold.
 
-- [ ] **Step 3: Implement `MapEngine`**
+- [x] **Step 3: Implement `MapEngine`**
 
   Create one map per controller lifetime. Add stable GeoJSON sources `endpoints`, `driver`, and `route` once; subsequent changes call `setData()` rather than recreating map/layers. Draggable A/B markers update the endpoints source and invoke callbacks.
 
-- [ ] **Step 4: Implement geolocation lifecycle**
+- [x] **Step 4: Implement geolocation lifecycle**
 
   Export `getCurrentPositionOnce(options)` and `startLocationWatch({ onPosition, onError }) -> stop()`. Permission denial, timeout, unavailable GPS, and stale browser callbacks have distinct messages; never return fake coordinates.
 
-- [ ] **Step 5: Remove Leaflet bootstrap**
+- [x] **Step 5: Remove Leaflet bootstrap**
 
   Replace Leaflet tags in `index.html` with self-hosted MapLibre vendor assets. Do not yet delete old picker code until Task 8 is green.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
   Run `npm run test:web`, `node --check` on every new JS module, and open a minimal map harness at desktop/mobile widths. Record WebGL initialization failure as an explicit error state.
 
-- [ ] **Checkpoint:** `feat(map): add reusable MapLibre engine`
+- [x] **Checkpoint:** `feat(map): add reusable MapLibre engine`
 
 ### Task 8: Replace sender A/B selection and quote flow
 

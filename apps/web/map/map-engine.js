@@ -1,0 +1,429 @@
+/**
+ * Reusable MapLibre GL JS Engine for MoveFlow.
+ */
+
+export const DEFAULT_STYLE = {
+  version: 8,
+  sources: {
+    "osm-tiles": {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    },
+  },
+  layers: [
+    {
+      id: "osm-tiles-layer",
+      type: "raster",
+      source: "osm-tiles",
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
+
+function emptyFeatureCollection() {
+  return {
+    type: "FeatureCollection",
+    features: [],
+  };
+}
+
+function createMarkerElement(label, color) {
+  const el = document.createElement("div");
+  el.className = `moveflow-marker moveflow-marker-${label.toLowerCase()}`;
+  el.style.width = "30px";
+  el.style.height = "30px";
+  el.style.borderRadius = "50%";
+  el.style.backgroundColor = color;
+  el.style.color = "#ffffff";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.style.fontWeight = "bold";
+  el.style.fontSize = "14px";
+  el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.35)";
+  el.style.cursor = "grab";
+  el.style.border = "2px solid #ffffff";
+  el.innerText = label;
+  return el;
+}
+
+function createDriverMarkerElement() {
+  const el = document.createElement("div");
+  el.className = "moveflow-marker moveflow-marker-driver";
+  el.style.width = "34px";
+  el.style.height = "34px";
+  el.style.borderRadius = "50%";
+  el.style.backgroundColor = "#2563eb";
+  el.style.color = "#ffffff";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.style.fontSize = "16px";
+  el.style.boxShadow = "0 0 0 4px rgba(37,99,235,0.35), 0 2px 6px rgba(0,0,0,0.35)";
+  el.style.border = "2px solid #ffffff";
+  el.innerHTML = "🛵";
+  return el;
+}
+
+export class MapEngine {
+  constructor({
+    container,
+    styleUrl = null,
+    initialCenter = [106.663, 10.754], // HCMC [lng, lat]
+    initialZoom = 13,
+    onDragPickup = null,
+    onDragDropoff = null,
+  }) {
+    this.container =
+      typeof container === "string"
+        ? document.getElementById(container)
+        : container;
+    if (!this.container) {
+      throw new Error("MapEngine: Container element not found");
+    }
+
+    const maplibregl =
+      window.maplibregl || (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
+
+    if (!maplibregl) {
+      throw new Error("MapLibre GL JS library not found on page");
+    }
+
+    this.onDragPickup = onDragPickup;
+    this.onDragDropoff = onDragDropoff;
+    this.pickup = null;
+    this.dropoff = null;
+    this.driverLocation = null;
+    this.route = null;
+
+    this.markerA = null;
+    this.markerB = null;
+    this.markerDriver = null;
+
+    const style = styleUrl || DEFAULT_STYLE;
+
+    this.map = new maplibregl.Map({
+      container: this.container,
+      style,
+      center: initialCenter,
+      zoom: initialZoom,
+      attributionControl: false,
+    });
+
+    this.map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right",
+    );
+    this.map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    this._readyPromise = new Promise((resolve, reject) => {
+      this.map.once("load", () => {
+        try {
+          this._initLayers();
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+      this.map.once("error", (e) => {
+        if (!this.map.loaded()) {
+          reject(e.error || new Error("Failed to load map style"));
+        }
+      });
+    });
+  }
+
+  async ready() {
+    return this._readyPromise;
+  }
+
+  _initLayers() {
+    // Route layer
+    if (!this.map.getSource("route")) {
+      this.map.addSource("route", {
+        type: "geojson",
+        data: emptyFeatureCollection(),
+      });
+
+      this.map.addLayer({
+        id: "route-casing",
+        type: "line",
+        source: "route",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#1e3a8a",
+          "line-width": 8,
+          "line-opacity": 0.4,
+        },
+      });
+
+      this.map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 5,
+          "line-opacity": 0.9,
+        },
+      });
+    }
+
+    // Endpoints source
+    if (!this.map.getSource("endpoints")) {
+      this.map.addSource("endpoints", {
+        type: "geojson",
+        data: emptyFeatureCollection(),
+      });
+    }
+
+    // Driver source
+    if (!this.map.getSource("driver")) {
+      this.map.addSource("driver", {
+        type: "geojson",
+        data: emptyFeatureCollection(),
+      });
+    }
+  }
+
+  setEndpoints({ pickup, dropoff }) {
+    this.pickup = pickup || null;
+    this.dropoff = dropoff || null;
+
+    const maplibregl = window.maplibregl;
+
+    // Pickup marker A
+    if (this.pickup && typeof this.pickup.lat === "number" && typeof this.pickup.lng === "number") {
+      if (!this.markerA) {
+        const el = createMarkerElement("A", "#10b981");
+        this.markerA = new maplibregl.Marker({
+          element: el,
+          draggable: typeof this.onDragPickup === "function",
+        })
+          .setLngLat([this.pickup.lng, this.pickup.lat])
+          .addTo(this.map);
+
+        if (typeof this.onDragPickup === "function") {
+          this.markerA.on("dragend", () => {
+            const { lng, lat } = this.markerA.getLngLat();
+            this.pickup = { lat, lng };
+            this._updateEndpointsSource();
+            this.onDragPickup({ lat, lng });
+          });
+        }
+      } else {
+        this.markerA.setLngLat([this.pickup.lng, this.pickup.lat]);
+      }
+    } else if (this.markerA) {
+      this.markerA.remove();
+      this.markerA = null;
+    }
+
+    // Dropoff marker B
+    if (this.dropoff && typeof this.dropoff.lat === "number" && typeof this.dropoff.lng === "number") {
+      if (!this.markerB) {
+        const el = createMarkerElement("B", "#ef4444");
+        this.markerB = new maplibregl.Marker({
+          element: el,
+          draggable: typeof this.onDragDropoff === "function",
+        })
+          .setLngLat([this.dropoff.lng, this.dropoff.lat])
+          .addTo(this.map);
+
+        if (typeof this.onDragDropoff === "function") {
+          this.markerB.on("dragend", () => {
+            const { lng, lat } = this.markerB.getLngLat();
+            this.dropoff = { lat, lng };
+            this._updateEndpointsSource();
+            this.onDragDropoff({ lat, lng });
+          });
+        }
+      } else {
+        this.markerB.setLngLat([this.dropoff.lng, this.dropoff.lat]);
+      }
+    } else if (this.markerB) {
+      this.markerB.remove();
+      this.markerB = null;
+    }
+
+    this._updateEndpointsSource();
+  }
+
+  _updateEndpointsSource() {
+    const source = this.map.getSource("endpoints");
+    if (!source) return;
+
+    const features = [];
+    if (this.pickup) {
+      features.push({
+        type: "Feature",
+        properties: { role: "pickup", label: "A" },
+        geometry: {
+          type: "Point",
+          coordinates: [this.pickup.lng, this.pickup.lat],
+        },
+      });
+    }
+    if (this.dropoff) {
+      features.push({
+        type: "Feature",
+        properties: { role: "dropoff", label: "B" },
+        geometry: {
+          type: "Point",
+          coordinates: [this.dropoff.lng, this.dropoff.lat],
+        },
+      });
+    }
+
+    source.setData({
+      type: "FeatureCollection",
+      features,
+    });
+  }
+
+  setDriverLocation(pointOrNull) {
+    this.driverLocation = pointOrNull || null;
+    const maplibregl = window.maplibregl;
+
+    if (
+      this.driverLocation &&
+      typeof this.driverLocation.lat === "number" &&
+      typeof this.driverLocation.lng === "number"
+    ) {
+      if (!this.markerDriver) {
+        const el = createDriverMarkerElement();
+        this.markerDriver = new maplibregl.Marker({ element: el })
+          .setLngLat([this.driverLocation.lng, this.driverLocation.lat])
+          .addTo(this.map);
+      } else {
+        this.markerDriver.setLngLat([
+          this.driverLocation.lng,
+          this.driverLocation.lat,
+        ]);
+      }
+    } else if (this.markerDriver) {
+      this.markerDriver.remove();
+      this.markerDriver = null;
+    }
+
+    const source = this.map.getSource("driver");
+    if (source) {
+      source.setData(
+        this.driverLocation
+          ? {
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  properties: { role: "driver" },
+                  geometry: {
+                    type: "Point",
+                    coordinates: [
+                      this.driverLocation.lng,
+                      this.driverLocation.lat,
+                    ],
+                  },
+                },
+              ],
+            }
+          : emptyFeatureCollection(),
+      );
+    }
+  }
+
+  setRoute(lineStringOrNull) {
+    this.route = lineStringOrNull || null;
+    const source = this.map.getSource("route");
+    if (!source) return;
+
+    if (
+      this.route &&
+      this.route.type === "LineString" &&
+      Array.isArray(this.route.coordinates) &&
+      this.route.coordinates.length > 0
+    ) {
+      source.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: this.route,
+          },
+        ],
+      });
+    } else {
+      source.setData(emptyFeatureCollection());
+    }
+  }
+
+  fitRelevantPoints({ padding = 50 } = {}) {
+    const maplibregl = window.maplibregl;
+    if (!maplibregl) return;
+
+    const bounds = new maplibregl.LngLatBounds();
+    let pointCount = 0;
+
+    if (this.pickup) {
+      bounds.extend([this.pickup.lng, this.pickup.lat]);
+      pointCount++;
+    }
+    if (this.dropoff) {
+      bounds.extend([this.dropoff.lng, this.dropoff.lat]);
+      pointCount++;
+    }
+    if (this.driverLocation) {
+      bounds.extend([this.driverLocation.lng, this.driverLocation.lat]);
+      pointCount++;
+    }
+
+    if (
+      this.route &&
+      this.route.type === "LineString" &&
+      Array.isArray(this.route.coordinates)
+    ) {
+      for (const [lng, lat] of this.route.coordinates) {
+        bounds.extend([lng, lat]);
+        pointCount++;
+      }
+    }
+
+    if (pointCount > 0) {
+      this.map.fitBounds(bounds, {
+        padding,
+        maxZoom: 16,
+        duration: 800,
+      });
+    }
+  }
+
+  resize() {
+    if (this.map) {
+      this.map.resize();
+    }
+  }
+
+  destroy() {
+    if (this.markerA) {
+      this.markerA.remove();
+      this.markerA = null;
+    }
+    if (this.markerB) {
+      this.markerB.remove();
+      this.markerB = null;
+    }
+    if (this.markerDriver) {
+      this.markerDriver.remove();
+      this.markerDriver = null;
+    }
+    if (this.map) {
+      this.map.remove();
+      this.map = null;
+    }
+  }
+}
