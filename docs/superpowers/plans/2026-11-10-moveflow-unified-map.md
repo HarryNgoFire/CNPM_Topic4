@@ -552,27 +552,27 @@ type LiveTrackingResponse = {
 GET /api/v1/shipments/:id/live
 ```
 
-- [ ] **Step 1: Write privacy tests**
+- [x] **Step 1: Write privacy tests**
 
   Owner sender, assigned driver, dispatcher, and admin may read live state; unrelated sender/driver receive 403; public tracking never includes driver coordinates; terminal shipments return `driver: null`.
 
-- [ ] **Step 2: Implement bounded live response**
+- [x] **Step 2: Implement bounded live response**
 
   Return only the assigned active driver's last accepted point and accuracy/timestamp. Do not return user email, phone, driver identity, location history, or coordinates after terminal state.
 
-- [ ] **Step 3: Add lifecycle-aware polling**
+- [x] **Step 3: Add lifecycle-aware polling**
 
   Poll every 10 seconds only on an active authorized shipment detail view and only while `document.visibilityState === "visible"`. Abort on navigation, logout, terminal state, or controller destroy; update only the driver GeoJSON source and last-updated label.
 
-- [ ] **Step 4: Audit every coordinate/map surface**
+- [x] **Step 4: Audit every coordinate/map surface**
 
   Sender create/quote/detail, driver tasks/detail, tracking, dispatcher/admin shipment detail must use shared formatting and MapLibre where a map is actually shown. Public tracking remains timeline-only unless product requirements explicitly authorize a coarse map.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
   Run privacy tests and manually open owner/unrelated sessions. Expected: owner moves, unrelated account never receives coordinates, and no poll remains after leaving the view.
 
-- [ ] **Checkpoint:** `feat(tracking): add authorized live driver location`
+- [x] **Checkpoint:** `feat(tracking): add authorized live driver location`
 
 ### Task 11: Add opt-in self-hosted map infrastructure
 

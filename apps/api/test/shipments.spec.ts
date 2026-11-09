@@ -473,6 +473,103 @@ describe("Shipment state machine and ownership", () => {
     });
   });
 
+  describe("live tracking endpoint", () => {
+    const driverLoc = {
+      lat: 10.7726,
+      lng: 106.6981,
+      accuracyM: 12,
+      capturedAt: new Date("2026-11-10T00:00:00Z"),
+    };
+
+    beforeEach(() => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "OUT_FOR_DELIVERY",
+      });
+      db.driverAssignment.findFirst.mockResolvedValue({
+        id: "assignment-1",
+        driverId: "driver-1",
+        shipmentId: "ship",
+        status: "ACCEPTED",
+      });
+      db.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+        const text = strings.join("");
+        if (text.includes('FROM "Driver"')) {
+          return [driverLoc];
+        }
+        return [];
+      });
+    });
+
+    it("rejects unknown shipment with 404", async () => {
+      db.shipment.findUnique.mockResolvedValue(null);
+      await expect(service.live("unknown", actor)).rejects.toThrow("Shipment not found");
+    });
+
+    it("rejects unrelated sender with 403", async () => {
+      await expect(
+        service.live("ship", { sub: "other-sender", role: "SENDER" }),
+      ).rejects.toThrow();
+    });
+
+    it("allows owning sender with 200 and returns live driver coords", async () => {
+      const res = await service.live("ship", { sub: "sender-1", role: "SENDER" });
+      expect(res.shipmentId).toBe("ship");
+      expect(res.status).toBe("OUT_FOR_DELIVERY");
+      expect(res.driver).toEqual({
+        lat: driverLoc.lat,
+        lng: driverLoc.lng,
+        accuracyM: driverLoc.accuracyM,
+        capturedAt: "2026-11-10T00:00:00.000Z",
+      });
+      expect(res.lastUpdatedAt).toBe("2026-11-10T00:00:00.000Z");
+      expect((res as any).email).toBeUndefined();
+      expect((res as any).phone).toBeUndefined();
+      expect((res as any).driverId).toBeUndefined();
+    });
+
+    it("rejects unassigned driver with 403", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue(null);
+      await expect(
+        service.live("ship", { sub: "other-driver", role: "DRIVER" }),
+      ).rejects.toThrow();
+    });
+
+    it("allows assigned driver, dispatcher, and admin", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue({ id: "a1", driverId: "driver-1" });
+      const r1 = await service.live("ship", { sub: "driver-user-id", role: "DRIVER" });
+      expect(r1.driver).toBeDefined();
+
+      const r2 = await service.live("ship", { sub: "dispatcher-1", role: "DISPATCHER" });
+      expect(r2.driver).toBeDefined();
+
+      const r3 = await service.live("ship", { sub: "admin-1", role: "ADMIN" });
+      expect(r3.driver).toBeDefined();
+    });
+
+    it("returns driver: null for terminal states (DELIVERED, CANCELLED, DELIVERY_FAILED)", async () => {
+      for (const term of ["DELIVERED", "CANCELLED", "DELIVERY_FAILED"] as ShipmentStatus[]) {
+        db.shipment.findUnique.mockResolvedValue({
+          ...shipment,
+          senderId: "sender-1",
+          status: term,
+        });
+        const res = await service.live("ship", { sub: "sender-1", role: "SENDER" });
+        expect(res.status).toBe(term);
+        expect(res.driver).toBeNull();
+        expect(res.lastUpdatedAt).toBeNull();
+      }
+    });
+
+    it("returns driver: null when no active assignment exists", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue(null);
+      const res = await service.live("ship", { sub: "sender-1", role: "SENDER" });
+      expect(res.driver).toBeNull();
+      expect(res.lastUpdatedAt).toBeNull();
+    });
+  });
+
   describe("geofence protected transitions", () => {
     const pickupLoc = { lat: 10.7725, lng: 106.698 };
     const dropoffLoc = { lat: 10.7495, lng: 106.6525 };

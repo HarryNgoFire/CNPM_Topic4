@@ -266,6 +266,13 @@ export class SenderMapController {
     };
   }
 
+  updateLiveDriver(driverPoint) {
+    if (this.engine) {
+      this.engine.setDriverLocation(driverPoint);
+      this.engine.fitRelevantPoints();
+    }
+  }
+
   destroy() {
     this.quoteReq.abort();
     if (this.geocoding?.abort) {

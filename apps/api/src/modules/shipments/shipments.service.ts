@@ -24,6 +24,18 @@ export type NavigationPhase =
   | "AT_DROPOFF"
   | "COMPLETE";
 
+export type LiveTrackingResponse = {
+  shipmentId: string;
+  status: ShipmentStatus;
+  driver: {
+    lat: number;
+    lng: number;
+    accuracyM: number;
+    capturedAt: string;
+  } | null;
+  lastUpdatedAt: string | null;
+};
+
 export type NavigationResponse = {
   shipmentId: string;
   shipmentStatus: ShipmentStatus;
@@ -599,6 +611,98 @@ export class ShipmentsService {
       destination,
       route,
       arrival,
+    };
+  }
+
+  async live(id: string, actor: Actor): Promise<LiveTrackingResponse> {
+    const shipment = await this.db.shipment.findUnique({
+      where: { id },
+    });
+    if (!shipment) throw new NotFoundException("Shipment not found");
+
+    if (actor.role === "SENDER") {
+      if (shipment.senderId !== actor.sub) {
+        throw new ForbiddenException();
+      }
+    } else if (actor.role === "DRIVER") {
+      const assignment = await this.db.driverAssignment.findFirst({
+        where: {
+          shipmentId: id,
+          driver: { userId: actor.sub },
+        },
+      });
+      if (!assignment) throw new ForbiddenException();
+    } else if (actor.role !== "ADMIN" && actor.role !== "DISPATCHER") {
+      throw new ForbiddenException();
+    }
+
+    const isTerminal = ["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(
+      shipment.status,
+    );
+    if (isTerminal) {
+      return {
+        shipmentId: shipment.id,
+        status: shipment.status,
+        driver: null,
+        lastUpdatedAt: null,
+      };
+    }
+
+    const assignment = await this.db.driverAssignment.findFirst({
+      where: {
+        shipmentId: id,
+        status: { in: ["PENDING", "ACCEPTED"] },
+      },
+      orderBy: { assignedAt: "desc" },
+    });
+
+    if (!assignment?.driverId) {
+      return {
+        shipmentId: shipment.id,
+        status: shipment.status,
+        driver: null,
+        lastUpdatedAt: null,
+      };
+    }
+
+    const driverCoords = await this.db.$queryRaw<
+      Array<{
+        lat: number;
+        lng: number;
+        accuracyM: number | null;
+        capturedAt: Date | string | null;
+      }>
+    >`
+      SELECT
+        ST_Y(d.location::geometry)::double precision AS lat,
+        ST_X(d.location::geometry)::double precision AS lng,
+        d."locationAccuracyM" AS "accuracyM",
+        d."locationCapturedAt" AS "capturedAt"
+      FROM "Driver" d
+      WHERE d.id = ${assignment.driverId}::uuid
+    `;
+
+    const dLoc = driverCoords && driverCoords.length > 0 ? driverCoords[0] : null;
+    if (!dLoc || dLoc.lat == null || dLoc.lng == null || !dLoc.capturedAt) {
+      return {
+        shipmentId: shipment.id,
+        status: shipment.status,
+        driver: null,
+        lastUpdatedAt: null,
+      };
+    }
+
+    const capturedAtIso = new Date(dLoc.capturedAt).toISOString();
+    return {
+      shipmentId: shipment.id,
+      status: shipment.status,
+      driver: {
+        lat: dLoc.lat,
+        lng: dLoc.lng,
+        accuracyM: dLoc.accuracyM ?? 0,
+        capturedAt: capturedAtIso,
+      },
+      lastUpdatedAt: capturedAtIso,
     };
   }
 }

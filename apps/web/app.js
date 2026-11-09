@@ -63,6 +63,7 @@
   const patch = (path, body) => api(path, { method: "PATCH", body: JSON.stringify(body) });
   const get = path => api(path, { method: "GET" });
   const nav = view => {
+    stopLiveTracking();
     if (activeDriverTripController) {
       activeDriverTripController.destroy();
       activeDriverTripController = null;
@@ -184,6 +185,19 @@
   }
   let activeSenderMapController = null;
   let activeDriverTripController = null;
+  let activeDetailMapEngine = null;
+  let liveTrackingTimer = null;
+
+  function stopLiveTracking() {
+    if (liveTrackingTimer) {
+      clearInterval(liveTrackingTimer);
+      liveTrackingTimer = null;
+    }
+    if (activeDetailMapEngine) {
+      activeDetailMapEngine.destroy();
+      activeDetailMapEngine = null;
+    }
+  }
 
   function addressFields(prefix, title) {
     const pickup = prefix === "pickup";
@@ -564,8 +578,59 @@
     target.querySelector("#password-form").addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); try { await patch("/users/me/password", data); showToast("Đã đổi mật khẩu. Vui lòng đăng nhập lại."); await logout(false); } catch (error) { showToast(error.message, "error"); } });
   }
   async function renderShipmentDetails(target, id) {
+    stopLiveTracking();
     const shipment = await get(`/shipments/${encodeURIComponent(id)}`);
-    target.innerHTML = `${welcome("Chi tiết đơn hàng", `Mã vận đơn ${esc(shipment.trackingCode)} · Tạo lúc ${fmtDate(shipment.createdAt)}`, '<button class="btn btn-outline" data-view="shipments">← Quay lại đơn hàng</button>')}<div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Thông tin vận chuyển</h3><p>Trạng thái và chi phí được lưu trên hệ thống</p></div>${badge(shipment.status)}</div><div class="kpi-row"><span>Mã vận đơn</span><b>${esc(shipment.trackingCode)}</b></div><div class="kpi-row"><span>Loại dịch vụ</span><b>${esc(shipment.serviceType)}</b></div><div class="kpi-row"><span>Phí đã chốt</span><b>${fmtMoney(shipment.fee)}</b></div><div class="kpi-row"><span>Khối lượng</span><b>${esc(shipment.parcel?.weightKg ?? "—")} kg</b></div>${state.user.role === "DRIVER" ? `<div class="section-gap"><button class="btn btn-primary btn-sm" data-view="tasks">↗ Mở bản đồ dẫn đường (Công việc tài xế)</button></div>` : ""}</section><section class="panel"><div class="panel-head"><div><h3>Địa chỉ</h3><p>Thông tin do người tạo đơn cung cấp</p></div></div><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line)}, ${esc(shipment.pickup?.ward)}, ${esc(shipment.pickup?.district)}, ${esc(shipment.pickup?.city)}</span></div><div class="tracking-step section-gap"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line)}, ${esc(shipment.dropoff?.ward)}, ${esc(shipment.dropoff?.district)}, ${esc(shipment.dropoff?.city)}</span></div><div class="section-gap"><h3>Lịch sử</h3>${(shipment.history || []).map(item => `<div class="kpi-row"><span>${badge(item.toStatus)}</span><b>${fmtDate(item.occurredAt)}</b></div>`).join("") || '<p class="small-muted">Chưa có cập nhật.</p>'}</div></section></div>`; bindViewButtons(target);
+    const hasCoords = shipment.pickup?.lat != null && shipment.dropoff?.lat != null;
+    const isTerminal = ["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(shipment.status);
+
+    target.innerHTML = `${welcome("Chi tiết đơn hàng", `Mã vận đơn ${esc(shipment.trackingCode)} · Tạo lúc ${fmtDate(shipment.createdAt)}`, '<button class="btn btn-outline" data-view="shipments">← Quay lại đơn hàng</button>')}<div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Thông tin vận chuyển</h3><p>Trạng thái và chi phí được lưu trên hệ thống</p></div>${badge(shipment.status)}</div><div class="kpi-row"><span>Mã vận đơn</span><b>${esc(shipment.trackingCode)}</b></div><div class="kpi-row"><span>Loại dịch vụ</span><b>${esc(shipment.serviceType)}</b></div><div class="kpi-row"><span>Phí đã chốt</span><b>${fmtMoney(shipment.fee)}</b></div><div class="kpi-row"><span>Khối lượng</span><b>${esc(shipment.parcel?.weightKg ?? "—")} kg</b></div>${state.user.role === "DRIVER" ? `<div class="section-gap"><button class="btn btn-primary btn-sm" data-view="tasks">↗ Mở bản đồ dẫn đường (Công việc tài xế)</button></div>` : ""}</section><section class="panel"><div class="panel-head"><div><h3>Địa chỉ</h3><p>Thông tin do người tạo đơn cung cấp</p></div></div><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line)}, ${esc(shipment.pickup?.ward)}, ${esc(shipment.pickup?.district)}, ${esc(shipment.pickup?.city)}</span></div><div class="tracking-step section-gap"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line)}, ${esc(shipment.dropoff?.ward)}, ${esc(shipment.dropoff?.district)}, ${esc(shipment.dropoff?.city)}</span></div><div class="section-gap"><h3>Lịch sử</h3>${(shipment.history || []).map(item => `<div class="kpi-row"><span>${badge(item.toStatus)}</span><b>${fmtDate(item.occurredAt)}</b></div>`).join("") || '<p class="small-muted">Chưa có cập nhật.</p>'}</div></section></div>${hasCoords ? `<section class="panel section-gap"><div class="panel-head"><div><h3>Bản đồ hành trình & vị trí tài xế trực tiếp</h3><p id="live-driver-status" class="small-muted">${isTerminal ? "Đơn hàng đã hoàn tất hành trình." : "Đang kết nối vị trí trực tiếp..."}</p></div></div><div id="shipment-detail-map" class="moveflow-map-container" style="height:380px;border-radius:8px"></div></section>` : ""}`;
+    bindViewButtons(target);
+
+    if (hasCoords) {
+      try {
+        const { MapEngine } = await import("./map/map-engine.js");
+        const mapEl = target.querySelector("#shipment-detail-map");
+        if (mapEl) {
+          activeDetailMapEngine = new MapEngine({ container: mapEl });
+          await activeDetailMapEngine.ready();
+          activeDetailMapEngine.setEndpoints({
+            pickup: { lat: shipment.pickup.lat, lng: shipment.pickup.lng },
+            dropoff: { lat: shipment.dropoff.lat, lng: shipment.dropoff.lng },
+          });
+          activeDetailMapEngine.fitRelevantPoints();
+
+          const statusNote = target.querySelector("#live-driver-status");
+          const pollLive = async () => {
+            if (document.visibilityState !== "visible") return;
+            try {
+              const live = await get(`/shipments/${encodeURIComponent(id)}/live`);
+              if (live.driver && activeDetailMapEngine) {
+                activeDetailMapEngine.setDriverLocation(live.driver);
+                activeDetailMapEngine.fitRelevantPoints();
+                if (statusNote) {
+                  statusNote.textContent = `Tài xế đang di chuyển · Cập nhật lúc ${fmtDate(live.driver.capturedAt)} (Độ chính xác ~${Math.round(live.driver.accuracyM || 0)}m)`;
+                }
+              } else if (["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(live.status)) {
+                stopLiveTracking();
+                if (statusNote) statusNote.textContent = "Đơn hàng đã hoàn tất hành trình.";
+              } else {
+                if (statusNote) statusNote.textContent = "Chưa có tài xế nhận đơn hoặc tài xế chưa cập nhật vị trí.";
+              }
+            } catch {
+              // Not authorized or network error
+            }
+          };
+
+          await pollLive();
+
+          if (!isTerminal) {
+            liveTrackingTimer = setInterval(pollLive, 10000);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to mount shipment detail map", err);
+      }
+    }
   }
   function bindViewButtons(scope = root) {
     scope.querySelectorAll("[data-view]").forEach(button => { if (!button.dataset.bound) { button.dataset.bound = "1"; button.addEventListener("click", () => nav(button.dataset.view)); } });
@@ -608,6 +673,15 @@
     } catch (error) { button.disabled = false; showToast(error.message, "error"); }
   }
   async function logout(remote = true) {
+    stopLiveTracking();
+    if (activeDriverTripController) {
+      activeDriverTripController.destroy();
+      activeDriverTripController = null;
+    }
+    if (activeSenderMapController) {
+      activeSenderMapController.destroy();
+      activeSenderMapController = null;
+    }
     if (state.taskRefreshTimer) { clearInterval(state.taskRefreshTimer); state.taskRefreshTimer = null; }
     if (remote && state.refreshToken) { try { await post("/auth/logout", { refreshToken: state.refreshToken }); } catch { /* session cleanup is best-effort; local credentials are discarded regardless */ } }
     state.token = null; state.refreshToken = null; state.user = null; state.view = "dashboard"; state.detail = null; renderAuth("login", "Bạn đã đăng xuất an toàn.");

@@ -269,3 +269,28 @@ test("SenderMapController - GPS auto-fills pickup A and handles denial gracefull
   assert.ok(caughtErr);
   assert.match(caughtErr.message, /bị từ chối/);
 });
+
+test("SenderMapController - updateLiveDriver sets location on MapEngine", async () => {
+  const form = createMockForm();
+  let updatedDriver = null;
+  let fitCalled = false;
+
+  const controller = new SenderMapController({
+    mapElement: {},
+    form,
+    api: { post: async () => ({}) },
+    MapEngineClass: class MockEngine {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute() {}
+      setDriverLocation(pos) { updatedDriver = pos; }
+      fitRelevantPoints() { fitCalled = true; }
+      destroy() {}
+    },
+  });
+
+  await controller.mount();
+  controller.updateLiveDriver({ lat: 10.75, lng: 106.67 });
+  assert.deepEqual(updatedDriver, { lat: 10.75, lng: 106.67 });
+  assert.equal(fitCalled, true);
+});

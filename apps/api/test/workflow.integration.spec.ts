@@ -401,6 +401,16 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .get("shipments/" + shipment.id)
       .expect(403);
   });
+  it("protects live tracking privacy: blocks unrelated sender and allows owner", async () => {
+    const shipment = await create();
+    await call("other")
+      .get(`shipments/${shipment.id}/live`)
+      .expect(403);
+    const res = await call("sender")
+      .get(`shipments/${shipment.id}/live`)
+      .expect(200);
+    expect(res.body.shipmentId).toBe(shipment.id);
+  });
   it("refuses driver availability change during pending assignment", async () => {
     await create();
     await request(app.getHttpServer())

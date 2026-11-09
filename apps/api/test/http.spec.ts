@@ -51,6 +51,12 @@ describe("HTTP contract with real JWT guard and validation", () => {
       route: { distanceM: 1000, durationS: 120, geometry: { type: "LineString", coordinates: [] } },
       arrival: { eligible: false, distanceM: 500 },
     }),
+    live: jest.fn().mockResolvedValue({
+      shipmentId: "00000000-0000-4000-8000-000000000001",
+      status: "OUT_FOR_DELIVERY",
+      driver: { lat: 10.75, lng: 106.66, accuracyM: 10, capturedAt: "2026-11-10T00:00:00.000Z" },
+      lastUpdatedAt: "2026-11-10T00:00:00.000Z",
+    }),
     tracking: jest.fn().mockResolvedValue({
       trackingCode: "ABCDEF1234567890",
       status: "RECEIVED",
@@ -219,5 +225,14 @@ describe("HTTP contract with real JWT guard and validation", () => {
     request(app.getHttpServer())
       .get("/api/v1/shipments/00000000-0000-4000-8000-000000000001/navigation")
       .set("Authorization", "Bearer " + token("DRIVER"))
+      .expect(200));
+  it("rejects unauthorized live tracking request", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/shipments/00000000-0000-4000-8000-000000000001/live")
+      .expect(401));
+  it("permits authorized sender to fetch live tracking", () =>
+    request(app.getHttpServer())
+      .get("/api/v1/shipments/00000000-0000-4000-8000-000000000001/live")
+      .set("Authorization", "Bearer " + token("SENDER"))
       .expect(200));
 });

@@ -322,6 +322,24 @@ export function addResponseContracts(doc: OpenAPIObject) {
       ["eligible", "distanceM"],
     ),
   });
+  schemas.LiveTrackingResponse = object({
+    shipmentId: uuid,
+    status: status,
+    driver: {
+      oneOf: [
+        object({
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          accuracyM: { type: "number", minimum: 0 },
+          capturedAt: date,
+        }),
+        { type: "null" },
+      ],
+    },
+    lastUpdatedAt: {
+      oneOf: [date, { type: "null" }],
+    },
+  });
   doc.components ??= {};
   doc.components.schemas = { ...doc.components.schemas, ...schemas };
   const contracts: Record<string, any> = {
@@ -332,6 +350,7 @@ export function addResponseContracts(doc: OpenAPIObject) {
     "GET /api/v1/shipments": array("ShipmentResponse"),
     "GET /api/v1/shipments/{id}": ref("ShipmentDetailResponse"),
     "GET /api/v1/shipments/{id}/navigation": ref("NavigationResponse"),
+    "GET /api/v1/shipments/{id}/live": ref("LiveTrackingResponse"),
     "POST /api/v1/shipments/{id}/transition": ref("ShipmentResponse"),
     "GET /api/v1/tracking/{trackingCode}": ref("TrackingResponse"),
     "POST /api/v1/shipments/{id}/assign-driver": {
