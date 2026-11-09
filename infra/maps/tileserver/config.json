@@ -1,0 +1,25 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "fonts": "fonts",
+      "sprites": "sprites",
+      "styles": "/config/styles",
+      "mbtiles": "/data"
+    }
+  },
+  "styles": {
+    "moveflow": {
+      "style": "moveflow.json",
+      "tilejson": {
+        "type": "overlay",
+        "bounds": [102.14, 8.18, 109.46, 23.39]
+      }
+    }
+  },
+  "data": {
+    "v3": {
+      "mbtiles": "vietnam.mbtiles"
+    }
+  }
+}

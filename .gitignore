@@ -5,3 +5,12 @@ coverage/
 .env.*
 !.env.example
 *.log
+*.mbtiles
+*.osm.pbf
+*.osrm*
+infra/maps/tileserver/data/*
+!infra/maps/tileserver/data/.gitkeep
+infra/maps/osrm/data/*
+!infra/maps/osrm/data/.gitkeep
+infra/maps/nominatim/data/*
+!infra/maps/nominatim/data/.gitkeep

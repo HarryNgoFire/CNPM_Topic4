@@ -594,27 +594,27 @@ GET /api/v1/shipments/:id/live
 - Backend-only `GEOCODER_BASE_URL=http://nominatim:8080`.
 - Operators provide `MAP_TILE_ARCHIVE`, `OSRM_DATASET_BASE`, and `NOMINATIM_PBF_PATH`; no default remote download URL exists.
 
-- [ ] **Step 1: Define the opt-in Compose overlay**
+- [x] **Step 1: Define the opt-in Compose overlay**
 
   Pin image versions/digests for TileServer GL, `ghcr.io/project-osrm/osrm-backend`, and `mediagis/nominatim:5.3`. Add healthchecks, read-only dataset mounts where supported, persistent Nominatim data, CPU/memory examples, no public ports by default, and no `PBF_URL`.
 
-- [ ] **Step 2: Configure same-origin tile access**
+- [x] **Step 2: Configure same-origin tile access**
 
   Nginx proxies `/maps/` to TileServer GL with immutable cache for versioned PBF/font/sprite assets and short cache for style JSON. Preserve OSM/OpenMapTiles attribution in the style and UI.
 
-- [ ] **Step 3: Document safe data preparation**
+- [x] **Step 3: Document safe data preparation**
 
   Require a regional extract, record source URL/date/checksum/license, explain OSRM MLD extract/partition/customize, Nominatim address import, tile archive generation/acquisition, update cadence, rollback, and disk/RAM/time estimates. Full-planet import is explicitly unsupported by the local guide.
 
-- [ ] **Step 4: Add preflight-only verification**
+- [x] **Step 4: Add preflight-only verification**
 
   Document commands that check file existence/size/free disk and print planned resource use before any import. They must not download, import, delete, or replace data without an explicit operator command.
 
-- [ ] **Step 5: Verify infrastructure without large imports**
+- [x] **Step 5: Verify infrastructure without large imports**
 
   Run `docker compose -f compose.yaml -f compose.maps.yaml config`. With a deliberately tiny licensed fixture dataset, verify health endpoints, style JSON, one vector tile, one OSRM route, and one geocoder query. Do not claim Vietnam production readiness from the fixture.
 
-- [ ] **Checkpoint:** `feat(infra): add opt-in self-hosted map stack`
+- [x] **Checkpoint:** `feat(infra): add opt-in self-hosted map stack`
 
 ### Task 12: Performance, security, contract, and final acceptance gates
 
