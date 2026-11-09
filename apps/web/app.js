@@ -150,27 +150,118 @@
     target.querySelector("#shipment-search")?.addEventListener("input", filter); target.querySelector("#shipment-filter")?.addEventListener("change", filter); bindViewButtons(target);
   }
   // Coordinates are never guessed from text or prefilled with unrelated landmarks.
-  function addressFields(prefix, title) { return `<div class="form-section"><h3>${title}</h3><p>Nhập thông tin địa chỉ, sau đó bấm <b>Chọn vị trí trên bản đồ</b> và nhấp chính xác vị trí giao nhận.</p><div class="field"><label>Số nhà, tên đường</label><input name="${prefix}Line" maxlength="255" placeholder="Số nhà, tên đường" required></div><div class="field-row"><div class="field"><label>Phường / xã</label><input name="${prefix}Ward" maxlength="100" required></div><div class="field"><label>Quận / huyện</label><input name="${prefix}District" maxlength="100" required></div></div><div class="field"><label>Tỉnh / thành phố</label><input name="${prefix}City" value="Thành phố Hồ Chí Minh" maxlength="100" required></div><div class="field-row"><div class="field"><label>Vĩ độ</label><input name="${prefix}Lat" type="number" step="any" min="-90" max="90" placeholder="Chọn trên bản đồ" readonly required></div><div class="field"><label>Kinh độ</label><input name="${prefix}Lng" type="number" step="any" min="-180" max="180" placeholder="Chọn trên bản đồ" readonly required></div></div><button type="button" class="btn btn-outline btn-sm" data-action="pick-address-map" data-prefix="${prefix}">⌖ Chọn vị trí trên OpenStreetMap</button><p class="small-muted">Địa chỉ và tọa độ phải trùng nhau. Hãy kiểm tra ghim trước khi tạo đơn.</p></div>`; }
+  function addressFields(prefix, title) { 
+    return `<div class="form-section">
+      <h3>${title}</h3>
+      <p>Nhập thông tin địa chỉ, sau đó bấm <b>Chọn vị trí trên bản đồ</b> và nhấp chính xác vị trí giao nhận.</p>
+      <div class="field">
+        <label>Số nhà, tên đường</label>
+        <input name="${prefix}Line" maxlength="255" placeholder="Số nhà, tên đường" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Phường / xã</label>
+          <input name="${prefix}Ward" maxlength="100" required>
+        </div>
+        <div class="field">
+          <label>Quận / huyện</label>
+          <input name="${prefix}District" maxlength="100" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Tỉnh / thành phố</label>
+        <input name="${prefix}City" value="Thành phố Hồ Chí Minh" maxlength="100" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Vĩ độ</label>
+          <input name="${prefix}Lat" type="number" step="any" min="-90" max="90" placeholder="Chọn trên bản đồ" readonly required>
+        </div>
+        <div class="field">
+          <label>Kinh độ</label>
+          <input name="${prefix}Lng" type="number" step="any" min="-180" max="180" placeholder="Chọn trên bản đồ" readonly required>
+        </div>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" data-action="pick-address-map" data-prefix="${prefix}">⌖ Chọn vị trí trên Bản đồ</button>
+      <p class="small-muted">Địa chỉ và tọa độ phải trùng nhau. Hãy kiểm tra ghim trước khi tạo đơn.</p>
+    </div>`; 
+  }
   let pickerMap = null;
   function openAddressPicker(prefix, form) {
     const latInput = form.querySelector(`[name="${prefix}Lat"]`);
     const lngInput = form.querySelector(`[name="${prefix}Lng"]`);
     const old = document.querySelector("#address-map-modal"); if (old) old.remove();
     const overlay = document.createElement("div"); overlay.id = "address-map-modal"; overlay.className = "map-overlay";
-    overlay.innerHTML = `<div class="map-dialog"><div class="panel-head"><h3>Chọn chính xác ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}</h3><button class="btn btn-outline btn-sm" id="map-close" type="button">Đóng</button></div><p class="small-muted">Phóng to và bấm vào đúng cổng/số nhà trên bản đồ. Ghim này dùng để báo giá và điều hướng tài xế.</p><div id="address-picker-map" style="height:380px;max-height:55vh;border-radius:12px"></div><p id="map-picked" class="small-muted">Chưa chọn điểm</p><button id="map-confirm" type="button" class="btn btn-primary" disabled>Xác nhận tọa độ</button><p class="small-muted">© OpenStreetMap contributors · Bản đồ yêu cầu kết nối Internet</p></div>`;
+    
+    // Đã cố định width: 100%, overflow: hidden để không vỡ các mảnh gạch bản đồ
+    overlay.innerHTML = `<div class="map-dialog" style="width: min(720px, 94vw); overflow: hidden;">
+      <div class="panel-head">
+        <h3>Chọn chính xác ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}</h3>
+        <button class="btn btn-outline btn-sm" id="map-close" type="button">Đóng</button>
+      </div>
+      <p class="small-muted">Phóng to và bấm vào đúng vị trí trên bản đồ. Ghim này dùng để tính giá và điều hướng tài xế.</p>
+      <div id="address-picker-map" style="height: 380px; width: 100%; border-radius: 12px; position: relative; overflow: hidden; background: #eef2f8;"></div>
+      <p id="map-picked" class="small-muted" style="margin-top: 10px;">Chưa chọn điểm</p>
+      <button id="map-confirm" type="button" class="btn btn-primary" disabled>Xác nhận tọa độ</button>
+      <p class="small-muted" style="margin-top: 8px;">Bản đồ tải nhanh qua Esri CDN</p>
+    </div>`;
     document.body.appendChild(overlay);
-    const close = () => { if (pickerMap) { pickerMap.remove(); pickerMap = null; } overlay.remove(); };
+
+    const close = () => { 
+      if (pickerMap) { pickerMap.remove(); pickerMap = null; } 
+      overlay.remove(); 
+    };
     overlay.querySelector("#map-close").onclick = close;
     overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-    if (!window.L) { overlay.querySelector("#map-picked").textContent = "Không tải được thư viện bản đồ. Kiểm tra Internet."; return; }
+
+    if (!window.L) { 
+      overlay.querySelector("#map-picked").textContent = "Không tải được thư viện bản đồ. Kiểm tra Internet."; 
+      return; 
+    }
+
     const initial = latInput.value && lngInput.value ? [Number(latInput.value), Number(lngInput.value)] : [10.7769, 106.7009];
-    pickerMap = L.map("address-picker-map").setView(initial, latInput.value ? 16 : 12);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(pickerMap);
-    let chosen = null; let marker = null;
-    if (latInput.value && lngInput.value) { marker = L.marker(initial).addTo(pickerMap); chosen = initial; overlay.querySelector("#map-confirm").disabled = false; }
-    pickerMap.on("click", e => { chosen = [Number(e.latlng.lat.toFixed(7)), Number(e.latlng.lng.toFixed(7))]; if (marker) marker.setLatLng(chosen); else marker = L.marker(chosen).addTo(pickerMap); overlay.querySelector("#map-picked").textContent = `Tọa độ đã chọn: ${chosen[0]}, ${chosen[1]}`; overlay.querySelector("#map-confirm").disabled = false; });
-    overlay.querySelector("#map-confirm").onclick = () => { if (!chosen) return; latInput.value = String(chosen[0]); lngInput.value = String(chosen[1]); latInput.dispatchEvent(new Event("input", { bubbles: true })); close(); showToast("Đã xác nhận tọa độ trên bản đồ."); };
-    setTimeout(() => pickerMap?.invalidateSize(), 50);
+  // Giới hạn maxZoom là 17 để tránh lỗi "Map data not yet available"
+  pickerMap = L.map("address-picker-map", {
+    maxZoom: 17,
+    minZoom: 5
+  }).setView(initial, latInput.value ? 16 : 13);
+
+  // Dùng server tile OSM chuẩn của Wikimedia / Carto Voyager hoặc Esri có giới hạn zoom rõ ràng
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 17,
+    maxNativeZoom: 17,
+    attribution: 'Tiles &copy; Esri'
+  }).addTo(pickerMap);
+
+    let chosen = null; 
+    let marker = null;
+    if (latInput.value && lngInput.value) { 
+      marker = L.marker(initial).addTo(pickerMap); 
+      chosen = initial; 
+      overlay.querySelector("#map-confirm").disabled = false; 
+    }
+
+    pickerMap.on("click", e => { 
+      chosen = [Number(e.latlng.lat.toFixed(7)), Number(e.latlng.lng.toFixed(7))]; 
+      if (marker) marker.setLatLng(chosen); 
+      else marker = L.marker(chosen).addTo(pickerMap); 
+      overlay.querySelector("#map-picked").textContent = `Tọa độ đã chọn: ${chosen[0]}, ${chosen[1]}`; 
+      overlay.querySelector("#map-confirm").disabled = false; 
+    });
+
+    overlay.querySelector("#map-confirm").onclick = () => { 
+      if (!chosen) return; 
+      latInput.value = String(chosen[0]); 
+      lngInput.value = String(chosen[1]); 
+      latInput.dispatchEvent(new Event("input", { bubbles: true })); 
+      close(); 
+      showToast("Đã xác nhận tọa độ trên bản đồ."); 
+    };
+
+    // Ép render lại toàn bộ lưới ngay sau khi modal bung xong (khắc phục lỗi chỉ load 2 ô)
+    setTimeout(() => {
+      pickerMap?.invalidateSize();
+    }, 200);
   }
   function renderNewShipment(target) {
     state.quote = null;
