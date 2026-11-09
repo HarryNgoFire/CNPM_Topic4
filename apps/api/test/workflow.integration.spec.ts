@@ -12,7 +12,9 @@ import { hash } from "bcryptjs";
 import { AppModule } from "../src/app.module";
 import { configure } from "../src/bootstrap";
 import { PrismaService } from "../src/database/prisma.service";
+import { EmailDeliveryService } from "../src/modules/auth/email-delivery.service";
 import { DispatchService } from "../src/modules/dispatch/dispatch.service";
+import { OsrmRoutingService } from "../src/modules/pricing/osrm-routing.service";
 import { ShipmentsService } from "../src/modules/shipments/shipments.service";
 import { WebhooksService } from "../src/modules/webhooks/webhooks.service";
 const address = {
@@ -72,9 +74,18 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     const port = (receiver.address() as any).port;
     receiverUrl = `http://127.0.0.1:${port}`;
     process.env.WEBHOOK_ALLOWED_ORIGINS = receiverUrl;
+    // The suite must not depend on the public OSRM demo server being reachable.
     const module = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(OsrmRoutingService)
+      .useValue({
+        getDistance: async (from: typeof address, to: typeof address) => ({
+          distanceKm: from.lat === to.lat && from.lng === to.lng ? 0 : 4.3,
+          distanceSource: "OSRM_DRIVING",
+        }),
+      })
+      .compile();
     app = module.createNestApplication();
     configure(app);
     await app.init();
@@ -388,6 +399,72 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     await call("other")
       .get("shipments/" + shipment.id)
       .expect(403);
+  });
+  describe("account security", () => {
+    const patch = (name: string, path: string) =>
+      request(app.getHttpServer())
+        .patch("/api/v1/" + path)
+        .set("Authorization", "Bearer " + tokens[name]);
+    const auth = (path: string) =>
+      request(app.getHttpServer()).post("/api/v1/auth/" + path);
+    const email = "new-customer@test.local";
+    it("locks an account, revokes its sessions and rejects its access token", async () => {
+      const path = `admin/users/${users.other.id}/active`;
+      await patch("admin", path).send({ active: false }).expect(200);
+      expect(
+        await db.refreshSession.count({
+          where: { userId: users.other.id, revokedAt: null },
+        }),
+      ).toBe(0);
+      await call("other").get("users/me").expect(401);
+      await patch("admin", path).send({ active: true }).expect(200);
+      await call("other").get("users/me").expect(200);
+    });
+    it("removes a provisioned driver when the OTP email cannot be sent", async () => {
+      const send = jest
+        .spyOn(app.get(EmailDeliveryService), "sendVerificationCode")
+        .mockRejectedValueOnce(new Error("provider down"));
+      await call("admin")
+        .post("admin/users")
+        .send({ email, name: "New Driver", password, role: "DRIVER" })
+        .expect(503);
+      expect(send).toHaveBeenCalledTimes(1);
+      send.mockRestore();
+      expect(await db.user.count({ where: { email } })).toBe(0);
+      expect(await db.driver.count({ where: { user: { email } } })).toBe(0);
+    });
+    it("requires the emailed code before an account can sign in", async () => {
+      const send = jest
+        .spyOn(app.get(EmailDeliveryService), "sendVerificationCode")
+        .mockResolvedValue(undefined);
+      await auth("register")
+        .send({ email, name: "New Customer", password })
+        .expect(201);
+      const code = send.mock.calls[0][2];
+      send.mockRestore();
+      const blocked = await auth("login").send({ email, password }).expect(401);
+      expect(JSON.stringify(blocked.body)).toContain("EMAIL_NOT_VERIFIED");
+      await auth("verify-email").send({ email, code }).expect(200);
+      await auth("login").send({ email, password }).expect(200);
+    });
+    it("answers 429 once a code has used its five attempts", async () => {
+      const send = jest
+        .spyOn(app.get(EmailDeliveryService), "sendVerificationCode")
+        .mockResolvedValue(undefined);
+      await auth("register")
+        .send({ email, name: "New Customer", password })
+        .expect(201);
+      const code = send.mock.calls[0][2];
+      send.mockRestore();
+      const wrong = code === "000000" ? "000001" : "000000";
+      for (let attempt = 0; attempt < 5; attempt++)
+        await auth("verify-email").send({ email, code: wrong }).expect(400);
+      const locked = await auth("verify-email")
+        .send({ email, code })
+        .expect(429);
+      expect(JSON.stringify(locked.body)).toContain("Too many incorrect codes");
+      await auth("login").send({ email, password }).expect(401);
+    });
   });
   it("refuses driver availability change during pending assignment", async () => {
     await create();

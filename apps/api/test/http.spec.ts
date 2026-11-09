@@ -78,7 +78,9 @@ describe("HTTP contract with real JWT guard and validation", () => {
   beforeEach(() => {
     db.user.findUnique.mockImplementation(async ({ where }: any) => {
       const role = Object.entries(ids).find(([, id]) => where.id === id)?.[0];
-      return role ? { id: where.id, role, active: true } : null;
+      return role
+        ? { id: where.id, role, active: true, emailVerified: true }
+        : null;
     });
   });
   const token = (role: keyof typeof ids) => jwt.sign({ sub: ids[role], role });
@@ -174,6 +176,7 @@ describe("HTTP contract with real JWT guard and validation", () => {
       id: ids.SENDER,
       role: "DRIVER",
       active: true,
+      emailVerified: true,
     });
     return request(app.getHttpServer())
       .post("/api/v1/pricing/quote")

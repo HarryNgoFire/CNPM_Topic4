@@ -5,7 +5,7 @@
 2. Google Account > Security > App passwords (only shown for eligible accounts); create an App Password. This is NOT your regular Gmail password.
 3. Copy `.env.example` to `.env`, set `SMTP_USER`, `SMTP_APP_PASSWORD`, `EMAIL_FROM`, `OTP_SECRET`, `JWT_SECRET`. Keep secrets out of Git.
 4. Run `docker compose up --build -d`. Test register/OTP via the web UI.
-5. For local-only testing use `EMAIL_DELIVERY_MODE=console` (not in production). Check `docker compose logs api` for OTP.
+5. For local-only testing use `EMAIL_DELIVERY_MODE=console` together with `NODE_ENV=development` in `.env` (the Docker image defaults to production, which refuses console delivery). Check `docker compose logs api` for OTP. Never use this on a shared or public server.
 
 SMTP Gmail: smtp.gmail.com:465/TLS. Gmail can enforce quotas, block automated mail and may not expose App Passwords on managed accounts. This is appropriate for low-volume demos, not high-volume transactional delivery.
 

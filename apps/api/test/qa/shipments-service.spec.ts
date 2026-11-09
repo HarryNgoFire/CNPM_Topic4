@@ -16,7 +16,8 @@ describe("QA: ShipmentsService.create - tracking code collisions", () => {
 
   beforeEach(() => {
     db = { $transaction: jest.fn() };
-    service = new ShipmentsService(db, {} as any, {} as any);
+    const pricing = { quote: jest.fn().mockResolvedValue({ fee: 50200 }) };
+    service = new ShipmentsService(db, pricing as any, {} as any);
   });
 
   it("retries after trackingCode collisions and returns the shipment", async () => {
