@@ -316,27 +316,27 @@ type NavigationResponse = {
 GET /api/v1/shipments/:id/navigation
 ```
 
-- [ ] **Step 1: Write authorization and phase tests**
+- [x] **Step 1: Write authorization and phase tests**
 
   An unrelated driver and unrelated sender receive 403. `EN_ROUTE_PICKUP` returns only A; `ARRIVED_PICKUP` returns no route; `OUT_FOR_DELIVERY` returns only B; terminal states return no route. No response contains both active routes.
 
-- [ ] **Step 2: Write geofence transition tests**
+- [x] **Step 2: Write geofence transition tests**
 
   `ARRIVED_PICKUP` and `ARRIVED_DROPOFF` require a location no older than 30 seconds, accuracy at most 50 m, and PostGIS distance at most 100 m. Being inside the radius enables confirmation but never auto-confirms pickup/delivery.
 
-- [ ] **Step 3: Implement navigation from persisted truth**
+- [x] **Step 3: Implement navigation from persisted truth**
 
   Load shipment, assigned driver, current location, A/B geometry, and status under existing authorization rules. The backend—not client parameters—selects the destination and calls `RoutingService`.
 
-- [ ] **Step 4: Implement guarded transitions**
+- [x] **Step 4: Implement guarded transitions**
 
   Keep the generic transition endpoint but derive whether the requested next state is legal from current server state. Ignore any client-supplied destination/phase/distance.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
   Run shipment/navigation unit and integration tests, including two simultaneous arrival requests. Expected: one history/event row.
 
-- [ ] **Checkpoint:** `feat(navigation): enforce pickup-before-dropoff`
+- [x] **Checkpoint:** `feat(navigation): enforce pickup-before-dropoff`
 
 ### Task 6: Add a bounded Nominatim geocoding proxy
 

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma, ShipmentStatus } from "@prisma/client";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -13,6 +14,30 @@ import { AddressDto, BookingDto, ShipmentPageDto } from "../../common/dto";
 import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
+import { evaluateGeofenceArrival } from "../../common/geo";
+import { RoutingService, RouteResult } from "../pricing/routing.service";
+
+export type NavigationPhase =
+  | "TO_PICKUP"
+  | "AT_PICKUP"
+  | "TO_DROPOFF"
+  | "AT_DROPOFF"
+  | "COMPLETE";
+
+export type NavigationResponse = {
+  shipmentId: string;
+  shipmentStatus: ShipmentStatus;
+  phase: NavigationPhase;
+  currentLocation: {
+    lat: number;
+    lng: number;
+    accuracyM: number;
+    capturedAt: string;
+  } | null;
+  destination: { kind: "PICKUP" | "DROPOFF"; lat: number; lng: number } | null;
+  route: RouteResult | null;
+  arrival: { eligible: boolean; distanceM: number | null; reason?: string };
+};
 
 const VALID_TRANSITIONS = new Set<string>([
   "RECEIVED>EN_ROUTE_PICKUP",
@@ -41,6 +66,7 @@ export class ShipmentsService {
     private readonly db: PrismaService,
     private readonly pricing: PricingService,
     private readonly events: WebhooksService,
+    @Optional() private readonly routing?: RoutingService,
   ) {}
   private async address(tx: Prisma.TransactionClient, a: AddressDto) {
     const id = randomUUID();
@@ -259,6 +285,81 @@ export class ShipmentsService {
         throw new ConflictException("Invalid status transition");
       }
 
+      if (
+        actor.role === "DRIVER" &&
+        (toStatus === "ARRIVED_PICKUP" || toStatus === "ARRIVED_DROPOFF")
+      ) {
+        if (!acceptedAssignment) {
+          throw new ConflictException("No accepted driver assignment found");
+        }
+
+        const driverCoords = await tx.$queryRaw<
+          Array<{
+            lat: number;
+            lng: number;
+            accuracyM: number | null;
+            capturedAt: Date | string | null;
+          }>
+        >`
+          SELECT
+            ST_Y(d.location::geometry)::double precision AS lat,
+            ST_X(d.location::geometry)::double precision AS lng,
+            d."locationAccuracyM" AS "accuracyM",
+            d."locationCapturedAt" AS "capturedAt"
+          FROM "Driver" d
+          WHERE d.id = ${acceptedAssignment.driverId}::uuid
+        `;
+
+        const targetAddressId =
+          toStatus === "ARRIVED_PICKUP"
+            ? shipment.pickupAddressId
+            : shipment.dropoffAddressId;
+
+        const targetCoords = await tx.$queryRaw<
+          Array<{ lat: number; lng: number }>
+        >`
+          SELECT
+            ST_Y(a.location::geometry)::double precision AS lat,
+            ST_X(a.location::geometry)::double precision AS lng
+          FROM "Address" a
+          WHERE a.id = ${targetAddressId}::uuid
+        `;
+
+        const driverLoc = driverCoords[0];
+        const targetLoc = targetCoords[0];
+
+        if (
+          !driverLoc ||
+          !targetLoc ||
+          driverLoc.lat == null ||
+          driverLoc.lng == null ||
+          !driverLoc.capturedAt
+        ) {
+          throw new ConflictException(
+            "Driver location not available for geofence verification",
+          );
+        }
+
+        const arrival = evaluateGeofenceArrival({
+          currentLocation: {
+            lat: driverLoc.lat,
+            lng: driverLoc.lng,
+            accuracyM: driverLoc.accuracyM ?? 999,
+            capturedAt: driverLoc.capturedAt,
+          },
+          targetLocation: {
+            lat: targetLoc.lat,
+            lng: targetLoc.lng,
+          },
+        });
+
+        if (!arrival.eligible) {
+          throw new ConflictException(
+            arrival.reason ?? "Driver has not arrived at destination geofence",
+          );
+        }
+      }
+
       // Validate reason presence and bounds
       if (toStatus === "CANCELLED" || toStatus === "DELIVERY_FAILED") {
         if (
@@ -325,5 +426,179 @@ export class ShipmentsService {
 
       return updated;
     });
+  }
+
+  async navigation(id: string, actor: Actor): Promise<NavigationResponse> {
+    const shipment = await this.db.shipment.findUnique({
+      where: { id },
+    });
+    if (!shipment) throw new NotFoundException("Shipment not found");
+
+    if (actor.role === "SENDER") {
+      if (shipment.senderId !== actor.sub) {
+        throw new ForbiddenException();
+      }
+    } else if (actor.role === "DRIVER") {
+      const assignment = await this.db.driverAssignment.findFirst({
+        where: {
+          shipmentId: id,
+          driver: { userId: actor.sub },
+        },
+      });
+      if (!assignment) throw new ForbiddenException();
+    } else if (actor.role !== "ADMIN" && actor.role !== "DISPATCHER") {
+      throw new ForbiddenException();
+    }
+
+    let phase: NavigationPhase;
+    let targetKind: "PICKUP" | "DROPOFF" | null = null;
+
+    switch (shipment.status) {
+      case "RECEIVED":
+        phase = "TO_PICKUP";
+        targetKind = null;
+        break;
+      case "EN_ROUTE_PICKUP":
+        phase = "TO_PICKUP";
+        targetKind = "PICKUP";
+        break;
+      case "ARRIVED_PICKUP":
+        phase = "AT_PICKUP";
+        targetKind = null;
+        break;
+      case "OUT_FOR_DELIVERY":
+      case "IN_TRANSIT":
+        phase = "TO_DROPOFF";
+        targetKind = "DROPOFF";
+        break;
+      case "ARRIVED_DROPOFF":
+        phase = "AT_DROPOFF";
+        targetKind = null;
+        break;
+      case "DELIVERED":
+      case "CANCELLED":
+      case "DELIVERY_FAILED":
+      default:
+        phase = "COMPLETE";
+        targetKind = null;
+        break;
+    }
+
+    // Load A/B geometry
+    const locations = await this.db.$queryRaw<
+      Array<{
+        pickupLat: number;
+        pickupLng: number;
+        dropoffLat: number;
+        dropoffLng: number;
+      }>
+    >`
+      SELECT
+        ST_Y(p.location::geometry)::double precision AS "pickupLat",
+        ST_X(p.location::geometry)::double precision AS "pickupLng",
+        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
+        ST_X(d.location::geometry)::double precision AS "dropoffLng"
+      FROM "Address" p
+      JOIN "Address" d ON d.id = ${shipment.dropoffAddressId}::uuid
+      WHERE p.id = ${shipment.pickupAddressId}::uuid
+    `;
+    const coords = locations && locations.length > 0 ? locations[0] : null;
+
+    let destination: { kind: "PICKUP" | "DROPOFF"; lat: number; lng: number } | null = null;
+    if (targetKind === "PICKUP" && coords) {
+      destination = { kind: "PICKUP", lat: coords.pickupLat, lng: coords.pickupLng };
+    } else if (targetKind === "DROPOFF" && coords) {
+      destination = { kind: "DROPOFF", lat: coords.dropoffLat, lng: coords.dropoffLng };
+    }
+
+    // Load active driver current location
+    const assignment = await this.db.driverAssignment.findFirst({
+      where: {
+        shipmentId: id,
+        status: { in: ["PENDING", "ACCEPTED", "COMPLETED"] },
+      },
+      orderBy: { assignedAt: "desc" },
+    });
+
+    let currentLocation: {
+      lat: number;
+      lng: number;
+      accuracyM: number;
+      capturedAt: string;
+    } | null = null;
+
+    if (assignment?.driverId) {
+      const driverCoords = await this.db.$queryRaw<
+        Array<{
+          lat: number;
+          lng: number;
+          accuracyM: number | null;
+          capturedAt: Date | string | null;
+        }>
+      >`
+        SELECT
+          ST_Y(d.location::geometry)::double precision AS lat,
+          ST_X(d.location::geometry)::double precision AS lng,
+          d."locationAccuracyM" AS "accuracyM",
+          d."locationCapturedAt" AS "capturedAt"
+        FROM "Driver" d
+        WHERE d.id = ${assignment.driverId}::uuid
+      `;
+      const dLoc = driverCoords && driverCoords.length > 0 ? driverCoords[0] : null;
+      if (dLoc && dLoc.lat != null && dLoc.lng != null && dLoc.capturedAt) {
+        currentLocation = {
+          lat: dLoc.lat,
+          lng: dLoc.lng,
+          accuracyM: dLoc.accuracyM ?? 0,
+          capturedAt:
+            dLoc.capturedAt instanceof Date
+              ? dLoc.capturedAt.toISOString()
+              : new Date(dLoc.capturedAt).toISOString(),
+        };
+      }
+    }
+
+    // Calculate route and arrival
+    let route: RouteResult | null = null;
+    let arrival: { eligible: boolean; distanceM: number | null; reason?: string } = {
+      eligible: false,
+      distanceM: null,
+    };
+
+    if (destination) {
+      if (currentLocation && this.routing) {
+        try {
+          route = await this.routing.getRoute([
+            { lat: currentLocation.lat, lng: currentLocation.lng },
+            { lat: destination.lat, lng: destination.lng },
+          ]);
+        } catch {
+          route = null;
+        }
+      }
+
+      if (currentLocation) {
+        arrival = evaluateGeofenceArrival({
+          currentLocation,
+          targetLocation: { lat: destination.lat, lng: destination.lng },
+        });
+      } else {
+        arrival = {
+          eligible: false,
+          distanceM: null,
+          reason: "Driver location not available",
+        };
+      }
+    }
+
+    return {
+      shipmentId: shipment.id,
+      shipmentStatus: shipment.status,
+      phase,
+      currentLocation,
+      destination,
+      route,
+      arrival,
+    };
   }
 }

@@ -20,7 +20,8 @@ describe("Shipment state machine and ownership", () => {
   db.$transaction = (fn: any) => fn(db);
   const pricing: any = { quote: jest.fn() };
   const events: any = { record: jest.fn() };
-  const service = new ShipmentsService(db, pricing, events);
+  const routing: any = { getRoute: jest.fn() };
+  const service = new ShipmentsService(db, pricing, events, routing);
   const actor: any = { sub: "user-driver", role: "DRIVER" };
   const shipment = {
     id: "ship",
@@ -302,5 +303,294 @@ describe("Shipment state machine and ownership", () => {
     await service.create(input, { sub: "sender", role: "SENDER" });
     expect(db.shipment.create.mock.calls[0][0].data.fee).toBe(75300);
     expect(events.record).toHaveBeenCalledWith(db, shipment, null, "RECEIVED");
+  });
+
+  describe("navigation endpoint", () => {
+    const pickupCoords = { pickupLat: 10.7725, pickupLng: 106.698 }; // Ben Thanh
+    const dropoffCoords = { dropoffLat: 10.7495, dropoffLng: 106.6525 }; // Binh Tay
+    const driverLoc = {
+      lat: 10.7726,
+      lng: 106.6981,
+      accuracyM: 10,
+      capturedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.driverAssignment.findFirst.mockResolvedValue({
+        id: "assign-1",
+        driverId: "driver-1",
+        status: "ACCEPTED",
+        driver: { userId: "user-driver" },
+      });
+      routing.getRoute.mockResolvedValue({
+        distanceMeters: 5500,
+        distanceKm: 5.5,
+        durationSeconds: 600,
+        geometry: { type: "LineString", coordinates: [[106.698, 10.7725]] },
+        source: "OSRM",
+        profile: "driving",
+      });
+    });
+
+    it("rejects unknown shipment with 404", async () => {
+      db.shipment.findUnique.mockResolvedValue(null);
+      await expect(service.navigation("unknown", actor)).rejects.toThrow("Shipment not found");
+    });
+
+    it("rejects unrelated sender with 403", async () => {
+      await expect(
+        service.navigation("ship", { sub: "other-sender", role: "SENDER" }),
+      ).rejects.toThrow();
+    });
+
+    it("allows owning sender with 200", async () => {
+      const res = await service.navigation("ship", { sub: "sender-1", role: "SENDER" });
+      expect(res.shipmentId).toBe("ship");
+    });
+
+    it("rejects unassigned driver with 403", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue(null);
+      await expect(service.navigation("ship", actor)).rejects.toThrow();
+    });
+
+    it("allows assigned driver with 200", async () => {
+      const res = await service.navigation("ship", actor);
+      expect(res.shipmentId).toBe("ship");
+    });
+
+    it("allows admin unconditionally with 200", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue(null);
+      const res = await service.navigation("ship", { sub: "admin-1", role: "ADMIN" });
+      expect(res.shipmentId).toBe("ship");
+    });
+
+    it("returns TO_PICKUP and pickup route for EN_ROUTE_PICKUP", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.$queryRaw
+        .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }]) // addresses
+        .mockResolvedValueOnce([driverLoc]); // driver coords
+
+      const res = await service.navigation("ship", actor);
+      expect(res.phase).toBe("TO_PICKUP");
+      expect(res.destination).toEqual({
+        kind: "PICKUP",
+        lat: pickupCoords.pickupLat,
+        lng: pickupCoords.pickupLng,
+      });
+      expect(res.route).toBeDefined();
+      expect(res.arrival.eligible).toBe(true);
+    });
+
+    it("returns AT_PICKUP and no route for ARRIVED_PICKUP", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "ARRIVED_PICKUP",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.$queryRaw
+        .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }])
+        .mockResolvedValueOnce([driverLoc]);
+
+      const res = await service.navigation("ship", actor);
+      expect(res.phase).toBe("AT_PICKUP");
+      expect(res.destination).toBeNull();
+      expect(res.route).toBeNull();
+      expect(res.arrival.eligible).toBe(false);
+    });
+
+    it("returns TO_DROPOFF and dropoff route for OUT_FOR_DELIVERY", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "OUT_FOR_DELIVERY",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.$queryRaw
+        .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }])
+        .mockResolvedValueOnce([driverLoc]);
+
+      const res = await service.navigation("ship", actor);
+      expect(res.phase).toBe("TO_DROPOFF");
+      expect(res.destination).toEqual({
+        kind: "DROPOFF",
+        lat: dropoffCoords.dropoffLat,
+        lng: dropoffCoords.dropoffLng,
+      });
+      expect(res.route).toBeDefined();
+    });
+
+    it("returns AT_DROPOFF and no route for ARRIVED_DROPOFF", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "ARRIVED_DROPOFF",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.$queryRaw
+        .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }])
+        .mockResolvedValueOnce([driverLoc]);
+
+      const res = await service.navigation("ship", actor);
+      expect(res.phase).toBe("AT_DROPOFF");
+      expect(res.destination).toBeNull();
+      expect(res.route).toBeNull();
+    });
+
+    it("returns COMPLETE and no route for terminal states (DELIVERED, CANCELLED, DELIVERY_FAILED)", async () => {
+      for (const term of ["DELIVERED", "CANCELLED", "DELIVERY_FAILED"] as ShipmentStatus[]) {
+        db.shipment.findUnique.mockResolvedValue({
+          ...shipment,
+          senderId: "sender-1",
+          status: term,
+          pickupAddressId: "addr-p",
+          dropoffAddressId: "addr-d",
+        });
+        db.$queryRaw
+          .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }])
+          .mockResolvedValueOnce([driverLoc]);
+
+        const res = await service.navigation("ship", actor);
+        expect(res.phase).toBe("COMPLETE");
+        expect(res.destination).toBeNull();
+        expect(res.route).toBeNull();
+      }
+    });
+  });
+
+  describe("geofence protected transitions", () => {
+    const pickupLoc = { lat: 10.7725, lng: 106.698 };
+    const dropoffLoc = { lat: 10.7495, lng: 106.6525 };
+
+    const setupMocks = (driverLoc: any, targetLoc: any = pickupLoc) => {
+      db.driverAssignment.findFirst.mockResolvedValue({
+        id: "assign",
+        driverId: "driver",
+        status: "ACCEPTED",
+        driver: { userId: actor.sub },
+      });
+      db.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+        const sql = strings.join(" ");
+        if (sql.includes('FROM "Driver"')) {
+          return [driverLoc];
+        }
+        if (sql.includes('FROM "Address"')) {
+          return [targetLoc];
+        }
+        return [];
+      });
+    };
+
+    it("blocks DRIVER transitioning to ARRIVED_PICKUP when location is too far (> 100m)", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+      });
+      setupMocks({
+        lat: pickupLoc.lat + 0.005,
+        lng: pickupLoc.lng,
+        accuracyM: 10,
+        capturedAt: new Date(),
+      });
+
+      await expect(
+        service.transition("ship", "ARRIVED_PICKUP", actor),
+      ).rejects.toThrow("Driver is");
+    });
+
+    it("blocks DRIVER transitioning to ARRIVED_PICKUP when accuracy is poor (> 50m)", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+      });
+      setupMocks({
+        lat: pickupLoc.lat,
+        lng: pickupLoc.lng,
+        accuracyM: 65, // > 50m
+        capturedAt: new Date(),
+      });
+
+      await expect(
+        service.transition("ship", "ARRIVED_PICKUP", actor),
+      ).rejects.toThrow("exceeds 50m threshold");
+    });
+
+    it("blocks DRIVER transitioning to ARRIVED_PICKUP when timestamp is stale (> 30s)", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+      });
+      setupMocks({
+        lat: pickupLoc.lat,
+        lng: pickupLoc.lng,
+        accuracyM: 10,
+        capturedAt: new Date(Date.now() - 45000), // 45s ago
+      });
+
+      await expect(
+        service.transition("ship", "ARRIVED_PICKUP", actor),
+      ).rejects.toThrow("older than 30 seconds");
+    });
+
+    it("allows DRIVER transitioning to ARRIVED_PICKUP when within 100m, accurate and fresh", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+      });
+      setupMocks({
+        lat: pickupLoc.lat + 0.0002,
+        lng: pickupLoc.lng,
+        accuracyM: 15,
+        capturedAt: new Date(Date.now() - 5000),
+      });
+
+      const res = await service.transition("ship", "ARRIVED_PICKUP", actor);
+      expect(res.status).toBe("ARRIVED_PICKUP");
+      expect(events.record).toHaveBeenCalledWith(
+        db,
+        expect.anything(),
+        "EN_ROUTE_PICKUP",
+        "ARRIVED_PICKUP",
+      );
+    });
+
+    it("allows DRIVER transitioning to ARRIVED_DROPOFF when within 100m, accurate and fresh", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        status: "OUT_FOR_DELIVERY",
+        dropoffAddressId: "addr-d",
+      });
+      setupMocks(
+        {
+          lat: dropoffLoc.lat + 0.0001,
+          lng: dropoffLoc.lng,
+          accuracyM: 10,
+          capturedAt: new Date(Date.now() - 2000),
+        },
+        dropoffLoc,
+      );
+
+      const res = await service.transition("ship", "ARRIVED_DROPOFF", actor);
+      expect(res.status).toBe("ARRIVED_DROPOFF");
+    });
   });
 });

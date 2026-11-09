@@ -49,6 +49,14 @@ export class ShipmentsController {
   ) {
     return this.service.get(id, actor);
   }
+  @Get(":id/navigation")
+  @Roles("DRIVER", "ADMIN", "SENDER")
+  navigation(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.service.navigation(id, actor);
+  }
   @Post(":id/transition")
   @HttpCode(200)
   @Roles("DRIVER", "ADMIN", "SENDER")

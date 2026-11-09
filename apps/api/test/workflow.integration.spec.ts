@@ -155,7 +155,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
           data: { userId: users[name].id, status: "AVAILABLE" },
         });
         const lng = name === "driverA" ? address.lng : address.lng + 0.005;
-        await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${lng},${address.lat}),4326)::geography,"lastLocationAt"=now() WHERE id=${drivers[name].id}::uuid`;
+        await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${lng},${address.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers[name].id}::uuid`;
       }
       const res = await request(app.getHttpServer())
         .post("/api/v1/auth/login")
@@ -199,11 +199,23 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .post(`assignments/${assignment.id}/respond`)
       .send({ action: "ACCEPT" })
       .expect(200);
-    for (const toStatus of ["ARRIVED_PICKUP", "OUT_FOR_DELIVERY", "ARRIVED_DROPOFF", "DELIVERED"])
-      await call("driverA")
-        .post(`shipments/${shipment.id}/transition`)
-        .send({ toStatus })
-        .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_PICKUP" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "OUT_FOR_DELIVERY" })
+      .expect(200);
+    await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${booking.dropoffAddress.lng},${booking.dropoffAddress.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers.driverA.id}::uuid`;
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_DROPOFF" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "DELIVERED" })
+      .expect(200);
     const tracking = await request(app.getHttpServer())
       .get("/api/v1/tracking/" + shipment.trackingCode)
       .expect(200);
@@ -574,16 +586,19 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       where: { id: shipment.id },
       data: { status: "IN_TRANSIT" },
     });
-    for (const toStatus of [
-      "OUT_FOR_DELIVERY",
-      "ARRIVED_DROPOFF",
-      "DELIVERED",
-    ]) {
-      await call("driverA")
-        .post(`shipments/${shipment.id}/transition`)
-        .send({ toStatus })
-        .expect(200);
-    }
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "OUT_FOR_DELIVERY" })
+      .expect(200);
+    await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${booking.dropoffAddress.lng},${booking.dropoffAddress.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers.driverA.id}::uuid`;
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_DROPOFF" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "DELIVERED" })
+      .expect(200);
     const finalShipment = await db.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
     });
@@ -614,5 +629,45 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .expect(200);
     expect(res2.body.accepted).toBe(false);
     expect(res2.body.reason).toBe("TOO_SOON");
+  });
+  it("provides phase-aware navigation with authorization and geofence eligibility", async () => {
+    const shipment = await create();
+    const assignment = await pending(shipment.id);
+    await call("driverA")
+      .post(`assignments/${assignment.id}/respond`)
+      .send({ action: "ACCEPT" })
+      .expect(200);
+
+    // driverA is assigned and accepts -> EN_ROUTE_PICKUP
+    // driverB is unrelated driver -> 403
+    await call("driverB")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(403);
+
+    // other is unrelated sender -> 403
+    await call("other")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(403);
+
+    // sender (owner) -> 200
+    const senderNav = await call("sender")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(senderNav.body.phase).toBe("TO_PICKUP");
+    expect(senderNav.body.destination.kind).toBe("PICKUP");
+
+    // driverA -> 200
+    const driverNav = await call("driverA")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(driverNav.body.phase).toBe("TO_PICKUP");
+    expect(driverNav.body.destination.kind).toBe("PICKUP");
+    expect(driverNav.body.arrival.eligible).toBe(true);
+
+    // admin -> 200
+    const adminNav = await call("admin")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(adminNav.body.phase).toBe("TO_PICKUP");
   });
 });

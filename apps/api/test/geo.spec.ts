@@ -2,6 +2,7 @@ import {
   haversineDistanceMeters,
   isValidWgs84,
   evaluateDriverGps,
+  evaluateGeofenceArrival,
 } from "../src/common/geo";
 
 describe("GPS and Geo pure functions", () => {
@@ -293,6 +294,104 @@ describe("GPS and Geo pure functions", () => {
       });
 
       expect(result).toMatchObject({ accepted: true });
+    });
+  });
+
+  describe("evaluateGeofenceArrival", () => {
+    const target = { lat: 10.7725, lng: 106.698 }; // Ben Thanh
+    const baseTime = new Date("2026-11-10T02:00:00.000Z");
+
+    it("returns ineligible when current location is null", () => {
+      const result = evaluateGeofenceArrival({
+        currentLocation: null,
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(false);
+      expect(result.distanceM).toBeNull();
+    });
+
+    it("returns ineligible when location is older than 30s", () => {
+      const oldTime = new Date(baseTime.getTime() - 35000); // 35s ago
+      const result = evaluateGeofenceArrival({
+        currentLocation: {
+          lat: target.lat,
+          lng: target.lng,
+          accuracyM: 10,
+          capturedAt: oldTime,
+        },
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toContain("older than 30 seconds");
+    });
+
+    it("returns ineligible when location timestamp is in future", () => {
+      const futureTime = new Date(baseTime.getTime() + 35000);
+      const result = evaluateGeofenceArrival({
+        currentLocation: {
+          lat: target.lat,
+          lng: target.lng,
+          accuracyM: 10,
+          capturedAt: futureTime,
+        },
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toContain("in the future");
+    });
+
+    it("returns ineligible when accuracy exceeds 50m", () => {
+      const result = evaluateGeofenceArrival({
+        currentLocation: {
+          lat: target.lat,
+          lng: target.lng,
+          accuracyM: 55, // > 50m
+          capturedAt: baseTime,
+        },
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toContain("50m");
+    });
+
+    it("returns ineligible when distance > 100m", () => {
+      // ~150m away
+      const farPoint = { lat: target.lat + 0.0014, lng: target.lng };
+      const result = evaluateGeofenceArrival({
+        currentLocation: {
+          lat: farPoint.lat,
+          lng: farPoint.lng,
+          accuracyM: 15,
+          capturedAt: baseTime,
+        },
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(false);
+      expect(result.distanceM).toBeGreaterThan(100);
+      expect(result.reason).toContain("arrival radius");
+    });
+
+    it("returns eligible when distance <= 100m, accuracy <= 50m, freshness <= 30s", () => {
+      // ~40m away
+      const nearPoint = { lat: target.lat + 0.00035, lng: target.lng };
+      const freshTime = new Date(baseTime.getTime() - 10000); // 10s ago
+      const result = evaluateGeofenceArrival({
+        currentLocation: {
+          lat: nearPoint.lat,
+          lng: nearPoint.lng,
+          accuracyM: 20,
+          capturedAt: freshTime,
+        },
+        targetLocation: target,
+        serverNow: baseTime,
+      });
+      expect(result.eligible).toBe(true);
+      expect(result.distanceM).toBeLessThanOrEqual(100);
     });
   });
 });

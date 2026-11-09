@@ -170,3 +170,65 @@ export function evaluateDriverGps(input: GpsValidationInput): GpsEvaluationResul
 
   return { valid: true, accepted: true, distanceM: 0, durationMs: 0 };
 }
+
+export interface GeofenceArrivalInput {
+  currentLocation: {
+    lat: number;
+    lng: number;
+    accuracyM: number;
+    capturedAt: string | Date;
+  } | null;
+  targetLocation: GeoPoint;
+  serverNow?: Date;
+}
+
+export type GeofenceArrivalResult = {
+  eligible: boolean;
+  distanceM: number | null;
+  reason?: string;
+};
+
+export function evaluateGeofenceArrival(input: GeofenceArrivalInput): GeofenceArrivalResult {
+  const { currentLocation, targetLocation, serverNow = new Date() } = input;
+  if (!currentLocation) {
+    return { eligible: false, distanceM: null, reason: "No driver location recorded" };
+  }
+  if (!isValidWgs84(targetLocation) || !isValidWgs84(currentLocation)) {
+    return { eligible: false, distanceM: null, reason: "Invalid coordinates" };
+  }
+  const captured =
+    currentLocation.capturedAt instanceof Date
+      ? currentLocation.capturedAt
+      : new Date(currentLocation.capturedAt);
+  if (isNaN(captured.getTime())) {
+    return { eligible: false, distanceM: null, reason: "Invalid capture timestamp" };
+  }
+
+  const ageMs = serverNow.getTime() - captured.getTime();
+  if (ageMs < -30000 || ageMs > 30000) {
+    return {
+      eligible: false,
+      distanceM: null,
+      reason: ageMs > 30000 ? "Location is older than 30 seconds" : "Location timestamp is in the future",
+    };
+  }
+
+  if (currentLocation.accuracyM > GPS_CONSTANTS.GEOFENCE_MAX_ACCURACY_M) {
+    return {
+      eligible: false,
+      distanceM: null,
+      reason: `Location accuracy (${currentLocation.accuracyM}m) exceeds ${GPS_CONSTANTS.GEOFENCE_MAX_ACCURACY_M}m threshold`,
+    };
+  }
+
+  const distanceM = Math.round(haversineDistanceMeters(currentLocation, targetLocation));
+  if (distanceM > GPS_CONSTANTS.ARRIVAL_RADIUS_M) {
+    return {
+      eligible: false,
+      distanceM,
+      reason: `Driver is ${distanceM}m away from target (arrival radius is ${GPS_CONSTANTS.ARRIVAL_RADIUS_M}m)`,
+    };
+  }
+
+  return { eligible: true, distanceM };
+}
