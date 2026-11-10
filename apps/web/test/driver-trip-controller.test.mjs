@@ -320,3 +320,156 @@ test("DriverTripController - pauses tracking when document is hidden and resumes
   assert.equal(listeners.visibilitychange, undefined);
   delete global.document;
 });
+
+test("DriverTripController - preserves mock location across refreshNavigation without snapping back to old server location", async () => {
+  const store = {};
+  global.localStorage = {
+    getItem: (k) => store[k] || null,
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+  store["moveflow_mock_gps_enabled"] = "1";
+
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-test-preserve",
+    api: {
+      get: async () => ({
+        phase: "TO_PICKUP",
+        shipmentStatus: "EN_ROUTE_PICKUP",
+        destination: { kind: "PICKUP", lat: 10.75, lng: 106.66 },
+        currentLocation: { lat: 10.70, lng: 106.60 }, // Server's older start location
+        route: null,
+      }),
+    },
+    MapEngineClass: class {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute() {}
+      setDriverLocation() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+  });
+
+  await controller.mount();
+
+  // Set mock driver position mid-drive
+  controller.setMockLocation({ lat: 10.74, lng: 106.65 });
+  assert.deepEqual(controller.currentLocation, { lat: 10.74, lng: 106.65 });
+
+  // Call refreshNavigation - must PRESERVE mock position, NOT snap back to 10.70, 106.60
+  await controller.refreshNavigation();
+  assert.deepEqual(controller.currentLocation, { lat: 10.74, lng: 106.65 });
+
+  // Re-instantiate controller for same shipment - restores from mock storage
+  const controller2 = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-test-preserve",
+    api: {
+      get: async () => ({
+        phase: "TO_PICKUP",
+        shipmentStatus: "EN_ROUTE_PICKUP",
+        destination: { kind: "PICKUP", lat: 10.75, lng: 106.66 },
+        currentLocation: { lat: 10.70, lng: 106.60 },
+        route: null,
+      }),
+    },
+    MapEngineClass: class {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute() {}
+      setDriverLocation() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+  });
+
+  assert.deepEqual(controller2.currentLocation, { lat: 10.74, lng: 106.65 });
+  await controller2.mount();
+  assert.deepEqual(controller2.currentLocation, { lat: 10.74, lng: 106.65 });
+
+  delete global.localStorage;
+});
+
+test("DriverTripController - trims route polyline behind the driver as location advances", async () => {
+  let latestRoute = null;
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-trim-route",
+    api: {
+      get: async () => ({
+        phase: "TO_PICKUP",
+        shipmentStatus: "EN_ROUTE_PICKUP",
+        destination: { kind: "PICKUP", lat: 10.78, lng: 106.70 },
+        currentLocation: { lat: 10.75, lng: 106.67 },
+        route: {
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [106.67, 10.75],
+              [106.68, 10.76],
+              [106.69, 10.77],
+              [106.70, 10.78],
+            ],
+          },
+        },
+      }),
+    },
+    MapEngineClass: class {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute(r) { latestRoute = r; }
+      setDriverLocation() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+  });
+
+  await controller.mount();
+  assert.equal(latestRoute.coordinates.length, 4);
+
+  // Move driver past the first 2 segments to [106.69, 10.77]
+  controller.setMockLocation({ lat: 10.77, lng: 106.69 });
+  assert.equal(latestRoute.coordinates.length, 2);
+  assert.deepEqual(latestRoute.coordinates[0], [106.69, 10.77]);
+  assert.deepEqual(latestRoute.coordinates[1], [106.70, 10.78]);
+});
+
+test("DriverTripController - terminal DELIVERED / DELIVERY_FAILED clears mock and stops watch", async () => {
+  let watchStopped = false;
+  let postedStatus = null;
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-delivered-test",
+    api: {
+      get: async () => ({
+        phase: "COMPLETE",
+        shipmentStatus: "DELIVERED",
+        destination: null,
+        currentLocation: { lat: 10.70, lng: 106.60 },
+        route: null,
+      }),
+      post: async (url, body) => {
+        postedStatus = body.toStatus;
+        return { ok: true };
+      },
+    },
+    geolocation: {
+      startLocationWatch: () => () => { watchStopped = true; },
+    },
+    MapEngineClass: class {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute() {}
+      setDriverLocation() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+  });
+
+  await controller.mount();
+  await controller.confirmDelivery();
+  assert.equal(postedStatus, "DELIVERED");
+  assert.equal(controller.phase, "COMPLETE");
+});
