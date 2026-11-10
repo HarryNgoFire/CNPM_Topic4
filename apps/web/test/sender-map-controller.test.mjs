@@ -229,6 +229,65 @@ test("SenderMapController - updates address and route after marker drag", async 
   assert.equal(quoteReceived.distanceKm, 4.8);
 });
 
+test("SenderMapController - map click places pin, reverse geocodes, and advances active pin", async () => {
+  const form = createMockForm();
+  form.inputs.pickupLat.value = "";
+  form.inputs.pickupLng.value = "";
+  form.inputs.dropoffLat.value = "";
+  form.inputs.dropoffLng.value = "";
+
+  const endpointsHistory = [];
+  const activePinHistory = [];
+
+  const mockGeocoding = {
+    reverse: async (lat, lng) => ({
+      label: `Address at ${lat},${lng}`,
+      address: {
+        line: `${lat > 10.76 ? "100 Le Loi" : "50 Nguyen Trai"}`,
+        ward: "Phuong 1",
+        district: "Quan 1",
+        city: "TP Ho Chi Minh",
+      },
+      lat,
+      lng,
+    }),
+  };
+
+  const controller = new SenderMapController({
+    mapElement: createMockElement(),
+    form,
+    api: { post: async () => ({ fee: 25000, distanceKm: 2.5, durationSeconds: 300, geometry: { type: "LineString", coordinates: [] } }) },
+    geocoding: mockGeocoding,
+    MapEngineClass: class MockEngine {
+      ready() { return Promise.resolve(); }
+      setEndpoints(ep) { endpointsHistory.push(ep); }
+      setRoute() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+  });
+
+  controller.onActivePinChanged = (target) => activePinHistory.push(target);
+  await controller.mount();
+
+  assert.equal(controller.activePinTarget, "pickup");
+
+  // First click: places pickup A
+  await controller.handleMapClick({ lat: 10.755, lng: 106.665 });
+  assert.equal(form.inputs.pickupLat.value, "10.755");
+  assert.equal(form.inputs.pickupLng.value, "106.665");
+  assert.equal(form.inputs.pickupLine.value, "50 Nguyen Trai");
+  // Auto-advanced to dropoff because dropoff was empty
+  assert.equal(controller.activePinTarget, "dropoff");
+  assert.deepEqual(activePinHistory, ["dropoff"]);
+
+  // Second click: places dropoff B
+  await controller.handleMapClick({ lat: 10.775, lng: 106.695 });
+  assert.equal(form.inputs.dropoffLat.value, "10.775");
+  assert.equal(form.inputs.dropoffLng.value, "106.695");
+  assert.equal(form.inputs.dropoffLine.value, "100 Le Loi");
+});
+
 test("SenderMapController - ignores an older quote that resolves after a newer quote", async () => {
   const form = createMockForm();
   const pending = [];

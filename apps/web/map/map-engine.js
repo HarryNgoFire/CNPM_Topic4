@@ -83,6 +83,7 @@ export class MapEngine {
     initialZoom = 13,
     onDragPickup = null,
     onDragDropoff = null,
+    onClick = null,
   }) {
     this.container =
       typeof container === "string"
@@ -101,6 +102,7 @@ export class MapEngine {
 
     this.onDragPickup = onDragPickup;
     this.onDragDropoff = onDragDropoff;
+    this.onClick = onClick;
     this.pickup = null;
     this.dropoff = null;
     this.driverLocation = null;
@@ -118,6 +120,12 @@ export class MapEngine {
       center: initialCenter,
       zoom: initialZoom,
       attributionControl: false,
+    });
+
+    this.map.on("click", (e) => {
+      if (typeof this.onClick === "function") {
+        this.onClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      }
     });
 
     this.map.addControl(

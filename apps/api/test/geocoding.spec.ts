@@ -1,3 +1,4 @@
+import { describe, it, expect, jest, beforeEach, afterEach } from "@jest/globals";
 import {
   BadRequestException,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
 import {
   GeocodingService,
   normalizeNominatimResult,
+  normalizePhotonResult,
   OSM_ATTRIBUTION,
 } from "../src/modules/geocoding/geocoding.service";
 
@@ -275,7 +277,7 @@ describe("GeocodingService and Nominatim normalization", () => {
     });
 
     it("handles upstream timeout by returning 503", async () => {
-      jest.spyOn(global, "fetch" as any).mockImplementation((_url, init: any) => {
+      jest.spyOn(global, "fetch" as any).mockImplementation((_url: any, init: any) => {
         return new Promise((_, reject) => {
           init.signal?.addEventListener("abort", () => {
             const err = new Error("aborted");
@@ -289,6 +291,68 @@ describe("GeocodingService and Nominatim normalization", () => {
       await expect(service.search("Nguyen Trai")).rejects.toThrow(
         ServiceUnavailableException,
       );
+    });
+
+    it("supports Photon upstream format when configured", async () => {
+      process.env.GEOCODER_BASE_URL = "https://photon.komoot.io";
+      const photonService = new GeocodingService();
+      jest.spyOn(global, "fetch" as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {
+                name: "Cang Ton That Thuyet",
+                street: "Ton That Thuyet",
+                housenumber: "42",
+                district: "Quan 4",
+                city: "Thanh pho Ho Chi Minh",
+                country: "Viet Nam",
+              },
+              geometry: {
+                type: "Point",
+                coordinates: [106.7038, 10.7527],
+              },
+            },
+          ],
+        }),
+      } as any);
+
+      const results = await photonService.search("ton that thuyet");
+      expect(results).toHaveLength(1);
+      expect(results[0].address.line).toBe("42 Ton That Thuyet");
+      expect(results[0].address.district).toBe("Quan 4");
+      expect(results[0].lat).toBe(10.7527);
+      expect(results[0].lng).toBe(106.7038);
+    });
+  });
+
+  describe("normalizePhotonResult", () => {
+    it("normalizes complete Photon feature", () => {
+      const feature = {
+        type: "Feature",
+        properties: {
+          name: "Cong vien 23 Thang 9",
+          street: "Pham Ngu Lao",
+          housenumber: "1",
+          district: "Quan 1",
+          city: "Thanh pho Ho Chi Minh",
+          country: "Viet Nam",
+        },
+        geometry: {
+          type: "Point",
+          coordinates: [106.69, 10.76],
+        },
+      };
+
+      const res = normalizePhotonResult(feature);
+      expect(res.lat).toBe(10.76);
+      expect(res.lng).toBe(106.69);
+      expect(res.address.line).toBe("1 Pham Ngu Lao");
+      expect(res.address.district).toBe("Quan 1");
     });
   });
 });

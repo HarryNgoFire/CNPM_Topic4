@@ -251,7 +251,7 @@
       activeSenderMapController = null;
     }
 
-    target.innerHTML = `${welcome("Tạo đơn giao hàng", "Tạo yêu cầu giao nhận mới với định tuyến tự động OSRM và bản đồ MapLibre.")}<form id="shipment-form"><section class="panel"><div class="grid form-grid">${addressFields("pickup", "01 · Điểm lấy hàng")}${addressFields("dropoff", "02 · Điểm giao hàng")}</div><div class="form-section"><h3>Bản đồ lộ trình & vị trí ghim (A → B)</h3><p class="small-muted">Bạn có thể kéo thả trực tiếp ghim <b>A (Lấy hàng)</b> và <b>B (Giao hàng)</b> trên bản đồ để cập nhật tọa độ chính xác.</p><div id="sender-shipment-map" class="moveflow-map-container" style="height:380px"></div></div><div class="form-section"><h3>03 · Thông tin kiện hàng</h3><p>Thông tin này dùng để tính phụ phí khối lượng theo bảng giá hiện tại.</p><div class="grid form-grid"><div class="field"><label>Khối lượng (kg)</label><input name="weightKg" type="number" min="0.01" max="9999" step="0.01" value="1" required></div><div class="field"><label>Loại dịch vụ</label><select name="serviceType"><option value="STANDARD">Tiêu chuẩn</option><option value="EXPRESS">Hỏa tốc</option></select></div><div class="field"><label>Dài (cm)</label><input name="lengthCm" type="number" min="0.01" step="0.01" value="20" required></div><div class="field"><label>Rộng (cm)</label><input name="widthCm" type="number" min="0.01" step="0.01" value="15" required></div><div class="field"><label>Cao (cm)</label><input name="heightCm" type="number" min="0.01" step="0.01" value="10" required></div></div></div><div id="quote-result"></div><div class="form-actions"><button class="btn btn-outline" type="button" id="quote-button">Tính phí dự kiến</button><button class="btn btn-primary" type="submit">Tạo đơn giao hàng →</button></div><p class="small-muted">Quãng đường và lộ trình tính tự động qua OSRM driving profile. Bản đồ nguồn OpenStreetMap.</p></section></form>`;
+    target.innerHTML = `${welcome("Tạo đơn giao hàng", "Tạo yêu cầu giao nhận mới với định tuyến tự động OSRM và bản đồ MapLibre.")}<form id="shipment-form"><section class="panel"><div class="grid form-grid">${addressFields("pickup", "01 · Điểm lấy hàng")}${addressFields("dropoff", "02 · Điểm giao hàng")}</div><div class="form-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px"><h3 style="margin:0">Bản đồ lộ trình & vị trí ghim (A → B)</h3><div style="display:flex;gap:6px"><button type="button" class="btn btn-sm btn-primary" id="btn-pin-pickup">📍 Ghim A (Lấy hàng)</button><button type="button" class="btn btn-sm btn-outline" id="btn-pin-dropoff">📍 Ghim B (Giao hàng)</button></div></div><p class="small-muted">Bấm trực tiếp lên bản đồ để cắm ghim đang chọn, hoặc kéo thả ghim <b>A</b> / <b>B</b> để cập nhật tọa độ chính xác.</p><div id="sender-shipment-map" class="moveflow-map-container" style="height:380px"></div></div><div class="form-section"><h3>03 · Thông tin kiện hàng</h3><p>Thông tin này dùng để tính phụ phí khối lượng theo bảng giá hiện tại.</p><div class="grid form-grid"><div class="field"><label>Khối lượng (kg)</label><input name="weightKg" type="number" min="0.01" max="9999" step="0.01" value="1" required></div><div class="field"><label>Loại dịch vụ</label><select name="serviceType"><option value="STANDARD">Tiêu chuẩn</option><option value="EXPRESS">Hỏa tốc</option></select></div><div class="field"><label>Dài (cm)</label><input name="lengthCm" type="number" min="0.01" step="0.01" value="20" required></div><div class="field"><label>Rộng (cm)</label><input name="widthCm" type="number" min="0.01" step="0.01" value="15" required></div><div class="field"><label>Cao (cm)</label><input name="heightCm" type="number" min="0.01" step="0.01" value="10" required></div></div></div><div id="quote-result"></div><div class="form-actions"><button class="btn btn-outline" type="button" id="quote-button">Tính phí dự kiến</button><button class="btn btn-primary" type="submit">Tạo đơn giao hàng →</button></div><p class="small-muted">Quãng đường và lộ trình tính tự động qua OSRM driving profile. Bản đồ nguồn OpenStreetMap.</p></section></form>`;
 
     const form = target.querySelector("#shipment-form");
     const mapEl = target.querySelector("#sender-shipment-map");
@@ -279,6 +279,39 @@
       });
 
       await activeSenderMapController.mount();
+
+      const btnPinPickup = target.querySelector("#btn-pin-pickup");
+      const btnPinDropoff = target.querySelector("#btn-pin-dropoff");
+
+      const updatePinButtons = (activeTarget) => {
+        if (!btnPinPickup || !btnPinDropoff) return;
+        if (activeTarget === "pickup") {
+          btnPinPickup.className = "btn btn-sm btn-primary";
+          btnPinDropoff.className = "btn btn-sm btn-outline";
+        } else {
+          btnPinPickup.className = "btn btn-sm btn-outline";
+          btnPinDropoff.className = "btn btn-sm btn-primary";
+        }
+      };
+
+      activeSenderMapController.onActivePinChanged = (activeTarget) => {
+        updatePinButtons(activeTarget);
+      };
+
+      btnPinPickup?.addEventListener("click", () => {
+        activeSenderMapController.setActivePinTarget("pickup");
+      });
+
+      btnPinDropoff?.addEventListener("click", () => {
+        activeSenderMapController.setActivePinTarget("dropoff");
+      });
+
+      target.querySelector("#pickup-search-input")?.addEventListener("focus", () => {
+        activeSenderMapController?.setActivePinTarget("pickup");
+      });
+      target.querySelector("#dropoff-search-input")?.addEventListener("focus", () => {
+        activeSenderMapController?.setActivePinTarget("dropoff");
+      });
 
       target.querySelector("#btn-gps-pickup")?.addEventListener("click", async () => {
         try {

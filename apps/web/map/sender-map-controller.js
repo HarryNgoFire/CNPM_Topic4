@@ -33,6 +33,8 @@ export class SenderMapController {
     this.quoteReq = new AbortableRequest();
     this.engine = null;
     this._inputHandler = null;
+    this.activePinTarget = "pickup";
+    this.onActivePinChanged = null;
   }
 
   async mount() {
@@ -40,9 +42,19 @@ export class SenderMapController {
       container: this.mapElement,
       onDragPickup: (coords) => this.onDragMarker("pickup", coords),
       onDragDropoff: (coords) => this.onDragMarker("dropoff", coords),
+      onClick: (coords) => this.handleMapClick(coords),
     });
 
     await this.engine.ready();
+
+    if (this.engine?.map?.getCanvas) {
+      try {
+        const canvas = this.engine.map.getCanvas();
+        if (canvas && canvas.style) {
+          canvas.style.cursor = "crosshair";
+        }
+      } catch {}
+    }
 
     // Initialize markers from form inputs if coordinates exist
     const pLat = this.getNumericInput("pickupLat");
@@ -137,6 +149,33 @@ export class SenderMapController {
 
     this.updateMapEndpoints();
     await this.recalculateRouteAndQuote();
+  }
+
+  setActivePinTarget(target) {
+    if (target === "pickup" || target === "dropoff") {
+      this.activePinTarget = target;
+      if (typeof this.onActivePinChanged === "function") {
+        this.onActivePinChanged(target);
+      }
+    }
+  }
+
+  async handleMapClick({ lat, lng }) {
+    if (typeof lat !== "number" || typeof lng !== "number") return;
+    const pLat = this.getNumericInput("pickupLat");
+    const dLat = this.getNumericInput("dropoffLat");
+
+    let target = this.activePinTarget;
+    if (!target) {
+      target = pLat == null ? "pickup" : (dLat == null ? "dropoff" : "dropoff");
+    }
+
+    await this.onDragMarker(target, { lat, lng });
+
+    // If pickup was placed and dropoff has no coordinates yet, auto-advance target to dropoff
+    if (target === "pickup" && this.getNumericInput("dropoffLat") == null) {
+      this.setActivePinTarget("dropoff");
+    }
   }
 
   selectSearchResult(prefix, geocodedItem) {

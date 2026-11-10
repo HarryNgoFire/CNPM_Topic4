@@ -21,6 +21,46 @@ type CachedResult<T> = {
 export const OSM_ATTRIBUTION =
   "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright";
 
+export function normalizePhotonResult(feature: any): GeocodedAddress {
+  if (!feature || typeof feature !== "object") {
+    throw new BadRequestException("Invalid upstream address object");
+  }
+  const props = feature.properties || {};
+  const coords = feature.geometry?.coordinates || [];
+  const rawLng = typeof coords[0] === "number" ? coords[0] : parseFloat(coords[0]);
+  const rawLat = typeof coords[1] === "number" ? coords[1] : parseFloat(coords[1]);
+
+  if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng)) {
+    throw new BadRequestException("Invalid coordinates in geocoding result");
+  }
+
+  const lineParts: string[] = [];
+  if (props.housenumber) lineParts.push(String(props.housenumber).trim());
+  if (props.street) lineParts.push(String(props.street).trim());
+  else if (props.name) lineParts.push(String(props.name).trim());
+
+  const line = lineParts.join(" ") || String(props.name || "").trim();
+  const ward = String(props.district || props.suburb || props.locality || "").trim();
+  const district = String(props.county || props.district || "").trim();
+  const city = String(props.city || props.state || "").trim();
+
+  const labelParts = [props.name, props.street, ward, district, city, props.country].filter(Boolean);
+  const label = labelParts.join(", ") || line || `${rawLat}, ${rawLng}`;
+
+  return {
+    label,
+    lat: rawLat,
+    lng: rawLng,
+    address: {
+      line,
+      ward,
+      district,
+      city: city || "Thành phố Hồ Chí Minh",
+    },
+    attribution: OSM_ATTRIBUTION,
+  };
+}
+
 export function normalizeNominatimResult(item: any): GeocodedAddress {
   if (!item || typeof item !== "object") {
     throw new BadRequestException("Invalid upstream address object");
@@ -169,9 +209,12 @@ export class GeocodingService {
 
     const task = (async () => {
       const baseUrl = this.getBaseUrl();
+      const isPhoton = baseUrl.includes("photon");
       const viewbox = (process.env.GEOCODER_VIEWBOX ?? "").trim();
-      let endpoint = `${baseUrl}/search?q=${encodeURIComponent(trimmed)}&format=jsonv2&addressdetails=1&limit=${boundLimit}&countrycodes=vn`;
-      if (viewbox) {
+      let endpoint = isPhoton
+        ? `${baseUrl}/api/?q=${encodeURIComponent(trimmed)}&limit=${boundLimit}`
+        : `${baseUrl}/search?q=${encodeURIComponent(trimmed)}&format=jsonv2&addressdetails=1&limit=${boundLimit}&countrycodes=vn`;
+      if (!isPhoton && viewbox) {
         endpoint += `&viewbox=${encodeURIComponent(viewbox)}`;
       }
 
@@ -186,6 +229,20 @@ export class GeocodingService {
             "Accept-Language": "vi",
             "User-Agent": "MoveFlow-UnifiedMap/1.0",
           },
+        }).catch(async (fetchErr) => {
+          // If public Nominatim is blocked/RST by ISP/firewall, fallback to Photon
+          if (!isPhoton && fetchErr.name !== "AbortError") {
+            const fallbackUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=${boundLimit}`;
+            return fetch(fallbackUrl, {
+              signal: controller.signal,
+              headers: {
+                Accept: "application/json",
+                "Accept-Language": "vi",
+                "User-Agent": "MoveFlow-UnifiedMap/1.0",
+              },
+            });
+          }
+          throw fetchErr;
         });
 
         if (!res.ok) {
@@ -202,17 +259,25 @@ export class GeocodingService {
           throw new ServiceUnavailableException("Invalid JSON response from geocoding upstream");
         }
 
-        if (!Array.isArray(json)) {
-          throw new ServiceUnavailableException("Unexpected response from geocoding upstream");
-        }
-
         const normalized: GeocodedAddress[] = [];
-        for (const item of json) {
-          try {
-            normalized.push(normalizeNominatimResult(item));
-          } catch {
-            // skip invalid individual entries
+        if (json && Array.isArray(json.features)) {
+          for (const item of json.features) {
+            try {
+              normalized.push(normalizePhotonResult(item));
+            } catch {
+              // skip invalid individual entries
+            }
           }
+        } else if (Array.isArray(json)) {
+          for (const item of json) {
+            try {
+              normalized.push(normalizeNominatimResult(item));
+            } catch {
+              // skip invalid individual entries
+            }
+          }
+        } else {
+          throw new ServiceUnavailableException("Unexpected response from geocoding upstream");
         }
 
         this.setCache(cacheKey, normalized);
@@ -262,7 +327,10 @@ export class GeocodingService {
 
     const task = (async () => {
       const baseUrl = this.getBaseUrl();
-      const endpoint = `${baseUrl}/reverse?lat=${lat}&lon=${lng}&format=jsonv2&addressdetails=1`;
+      const isPhoton = baseUrl.includes("photon");
+      const endpoint = isPhoton
+        ? `${baseUrl}/reverse?lat=${lat}&lon=${lng}`
+        : `${baseUrl}/reverse?lat=${lat}&lon=${lng}&format=jsonv2&addressdetails=1`;
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.getTimeoutMs());
@@ -275,6 +343,20 @@ export class GeocodingService {
             "Accept-Language": "vi",
             "User-Agent": "MoveFlow-UnifiedMap/1.0",
           },
+        }).catch(async (fetchErr) => {
+          // If public Nominatim is blocked/RST by ISP/firewall, fallback to Photon
+          if (!isPhoton && fetchErr.name !== "AbortError") {
+            const fallbackUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
+            return fetch(fallbackUrl, {
+              signal: controller.signal,
+              headers: {
+                Accept: "application/json",
+                "Accept-Language": "vi",
+                "User-Agent": "MoveFlow-UnifiedMap/1.0",
+              },
+            });
+          }
+          throw fetchErr;
         });
 
         if (!res.ok) {
@@ -291,11 +373,18 @@ export class GeocodingService {
           throw new ServiceUnavailableException("Invalid JSON response from geocoding upstream");
         }
 
-        if (!json || typeof json !== "object" || json.error) {
+        let normalized: GeocodedAddress;
+        if (json && Array.isArray(json.features)) {
+          if (json.features.length === 0) {
+            throw new NotFoundException("No address found at coordinates");
+          }
+          normalized = normalizePhotonResult(json.features[0]);
+        } else if (json && typeof json === "object" && !json.error) {
+          normalized = normalizeNominatimResult(json);
+        } else {
           throw new NotFoundException("No address found at coordinates");
         }
 
-        const normalized = normalizeNominatimResult(json);
         this.setCache(cacheKey, normalized);
         return normalized;
       } catch (err: any) {
