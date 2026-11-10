@@ -2,6 +2,13 @@
 (() => {
   const API_BASE = window.MOVEFLOW_API_BASE || `${location.origin}/api/v1`;
   const root = document.getElementById("app");
+  const DEMO_ACCOUNTS = [
+    { label: "Khách hàng", email: "sender@gmail.com", password: "admin" },
+    { label: "Tài xế A", email: "driver-a@gmail.com", password: "admin" },
+    { label: "Tài xế B", email: "driver-b@gmail.com", password: "admin" },
+    { label: "Điều phối", email: "dispatcher@gmail.com", password: "admin" },
+    { label: "Quản trị", email: "admin@gmail.com", password: "admin" },
+  ];
   const state = { token: null, refreshToken: null, user: null, view: "dashboard", authMode: "login", pendingEmail: "", lastShipments: [], lastQueue: [], lastUsers: [], lastPricing: [], quote: null, detail: null, taskRefreshTimer: null, taskRefreshPending: false };
   const STATUS = { RECEIVED: ["Đã tiếp nhận", "blue"], IN_TRANSIT: ["Đang vận chuyển", "warning"], OUT_FOR_DELIVERY: ["Đang giao hàng", "warning"], DELIVERED: ["Đã giao", "success"], PENDING: ["Chờ phản hồi", "blue"], ACCEPTED: ["Đã nhận đơn", "success"], REJECTED: ["Đã từ chối", "danger"], EXPIRED: ["Hết thời hạn", "neutral"], COMPLETED: ["Hoàn tất", "success"] };
   const TITLES = { dashboard: "Tổng quan", shipments: "Quản lý đơn hàng", new: "Tạo đơn giao hàng", tracking: "Tra cứu đơn hàng", tasks: "Công việc tài xế", users: "Quản lý tài khoản", pricing: "Bảng giá dịch vụ", profile: "Tài khoản của tôi", details: "Chi tiết đơn hàng" };
@@ -49,6 +56,19 @@
   const get = path => api(path, { method: "GET" });
   const nav = view => { if (view !== "tasks" && state.taskRefreshTimer) { clearInterval(state.taskRefreshTimer); state.taskRefreshTimer = null; } state.view = view; state.detail = null; document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view)); renderView(); document.querySelector(".sidebar")?.classList.remove("open"); };
 
+  function bindPasswordToggle(inputSelector = "#password") {
+    const passwordInput = root.querySelector(inputSelector);
+    const toggleButton = root.querySelector("[data-password-toggle]");
+    if (!passwordInput || !toggleButton) return;
+    toggleButton.addEventListener("click", () => {
+      const isHidden = passwordInput.type === "password";
+      passwordInput.type = isHidden ? "text" : "password";
+      toggleButton.textContent = isHidden ? "Ẩn" : "Hiện";
+      toggleButton.setAttribute("aria-label", isHidden ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+      passwordInput.focus();
+    });
+  }
+
   function renderAuth(mode = "login", notice = "") {
     state.authMode = mode; root.innerHTML = `
       <div class="auth-layout">
@@ -69,9 +89,20 @@
     root.querySelector("#auth-form")?.addEventListener("submit", submitAuth);
     root.querySelector("#resend-code")?.addEventListener("click", resendCode);
     root.querySelector("#back-login")?.addEventListener("click", () => renderAuth("login"));
+    bindPasswordToggle();
+    root.querySelectorAll("[data-demo-account]").forEach(button => button.addEventListener("click", () => {
+      const emailInput = root.querySelector("#email");
+      const passwordInput = root.querySelector("#password");
+      if (!emailInput || !passwordInput) return;
+      emailInput.value = button.dataset.email;
+      passwordInput.value = button.dataset.password;
+      passwordInput.type = "text";
+      const toggleButton = root.querySelector("[data-password-toggle]");
+      if (toggleButton) toggleButton.textContent = "Ẩn";
+    }));
   }
-  function authLogin() { return `<div class="seg-tabs"><button class="active" type="button" data-auth-mode="login">Đăng nhập</button><button type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Chào mừng trở lại</h2><p class="subhead">Đăng nhập để quản lý đơn hàng và hành trình giao nhận của bạn.</p><form id="auth-form"><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="72" required></div><button class="btn btn-primary btn-block" type="submit">Đăng nhập <span>→</span></button></form><div class="notice info">Tài khoản phải xác minh email bằng mã OTP trước khi được đăng nhập lần đầu.</div>`; }
-  function authRegister() { return `<div class="seg-tabs"><button type="button" data-auth-mode="login">Đăng nhập</button><button class="active" type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Tạo tài khoản mới</h2><p class="subhead">Dùng Gmail cá nhân hoặc email bạn có quyền truy cập. Mã xác minh sẽ được gửi đến địa chỉ này.</p><form id="auth-form"><div class="field"><label for="name">Họ và tên</label><input id="name" name="name" autocomplete="name" placeholder="Nguyễn Minh Anh" minlength="2" maxlength="100" required></div><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Tạo mật khẩu</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="Ít nhất 10 ký tự" required><small>Dùng mật khẩu riêng, dài ít nhất 10 ký tự; không dùng lại mật khẩu email.</small></div><button class="btn btn-primary btn-block" type="submit">Tạo tài khoản & gửi mã <span>→</span></button></form><div class="notice info">Để bảo vệ hệ thống, đăng ký công khai chỉ tạo tài khoản khách hàng. Tài khoản tài xế và quản lý do quản trị viên cấp.</div>`; }
+  function authLogin() { return `<div class="seg-tabs"><button class="active" type="button" data-auth-mode="login">Đăng nhập</button><button type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Chào mừng trở lại</h2><p class="subhead">Đăng nhập để quản lý đơn hàng và hành trình giao nhận của bạn.</p><form id="auth-form"><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Mật khẩu</label><div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" maxlength="72" required><button class="password-toggle" type="button" data-password-toggle aria-label="Hiện mật khẩu">Hiện</button></div></div><button class="btn btn-primary btn-block" type="submit">Đăng nhập <span>→</span></button></form><div class="demo-grid">${DEMO_ACCOUNTS.map(account => `<button class="demo-account" type="button" data-demo-account data-email="${esc(account.email)}" data-password="${esc(account.password)}">${esc(account.label)}<small>${esc(account.email)}</small></button>`).join("")}</div><div class="notice info">Tài khoản demo chuẩn: ${DEMO_ACCOUNTS.map(x => `${x.email}/${x.password}`).join("; ")}. Mật khẩu có thể xem bằng nút hiện/ẩn.</div>`; }
+  function authRegister() { return `<div class="seg-tabs"><button type="button" data-auth-mode="login">Đăng nhập</button><button class="active" type="button" data-auth-mode="register">Tạo tài khoản</button></div><h2>Tạo tài khoản mới</h2><p class="subhead">Dùng Gmail cá nhân hoặc email bạn có quyền truy cập. Mã xác minh sẽ được gửi đến địa chỉ này.</p><form id="auth-form"><div class="field"><label for="name">Họ và tên</label><input id="name" name="name" autocomplete="name" placeholder="Nguyễn Minh Anh" minlength="2" maxlength="100" required></div><div class="field"><label for="email">Email cá nhân</label><input id="email" name="email" type="email" autocomplete="email" placeholder="ban@gmail.com" required></div><div class="field"><label for="password">Tạo mật khẩu</label><div class="password-wrap"><input id="password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="Ít nhất 10 ký tự" required><button class="password-toggle" type="button" data-password-toggle aria-label="Hiện mật khẩu">Hiện</button></div><small>Dùng mật khẩu riêng, dài ít nhất 10 ký tự; không dùng lại mật khẩu email.</small></div><button class="btn btn-primary btn-block" type="submit">Tạo tài khoản & gửi mã <span>→</span></button></form><div class="notice info">Để bảo vệ hệ thống, đăng ký công khai chỉ tạo tài khoản khách hàng. Tài khoản tài xế và quản lý do quản trị viên cấp.</div>`; }
   function authVerify() { return `<h2>Xác minh email</h2><p class="subhead">Nhập mã 6 chữ số đã gửi đến <b>${esc(state.pendingEmail)}</b>. Mã hết hạn sau 10 phút.</p><form id="auth-form"><div class="field"><label for="code">Mã xác thực OTP</label><input class="code-input" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div><button class="btn btn-primary btn-block" type="submit">Xác minh tài khoản <span>→</span></button></form><div style="display:flex;justify-content:space-between;align-items:center;margin-top:15px"><button class="text-action" type="button" id="resend-code">Gửi lại mã</button><button class="text-action" type="button" id="back-login">Quay lại đăng nhập</button></div><div class="notice info">Không chia sẻ mã OTP cho bất kỳ ai. Nếu không thấy email, hãy kiểm tra thư mục Spam/Quảng cáo.</div>`; }
   async function submitAuth(event) {
     event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button[type="submit"]'); button.disabled = true; const old = button.innerHTML; button.textContent = "Đang xử lý…";
