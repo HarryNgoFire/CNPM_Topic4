@@ -257,54 +257,146 @@
     return window.MoveFlow;
   }
 
-  // Helper: Đảm bảo người dùng đang đăng nhập đúng vai trò
+  function getApiBase() {
+    const mf = getMf();
+    return mf?.state?.apiBase || `${location.origin}/api/v1`;
+  }
+
+  // Token cache tránh chạm rate-limit (8 lần/phút) của NestJS Throttler
+  const demoTokenCache = new Map();
+
+  async function getDemoAccountToken(email, password = "admin") {
+    const cached = demoTokenCache.get(email);
+    if (cached && cached.expiresAt > Date.now() + 60000) {
+      return cached.accessToken;
+    }
+    const apiBase = getApiBase();
+    try {
+      const res = await fetch(`${apiBase}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.accessToken) {
+        demoTokenCache.set(email, {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
+          expiresAt: Date.now() + (data.expiresIn ? data.expiresIn * 1000 : 840000)
+        });
+        return data.accessToken;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Helper: Đăng nhập admin để thực thi các tác vụ quản trị dự phòng (luôn thành công)
+  async function getAdminToken() {
+    return getDemoAccountToken("admin@gmail.com", "admin");
+  }
+
+  // Helper: Đảm bảo người dùng đang đăng nhập đúng vai trò (dùng token cache nếu có để siêu nhanh và không bị rate-limit)
   async function ensureRole(allowedRoles, fallbackEmail) {
     const mf = getMf();
     if (!mf) throw new Error("MoveFlow chưa sẵn sàng");
     const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
     const currentRole = mf.state?.user?.role;
-    if (!mf.state?.token || !currentRole || !roles.includes(currentRole)) {
-      mf.showToast?.(`Chuyển sang ${fallbackEmail} để thực hiện tác vụ…`, "info");
-      await mf.loginAs(fallbackEmail, "admin");
+    if (mf.state?.token && currentRole && roles.includes(currentRole)) {
+      return;
+    }
+
+    // Nếu đã có token cache hợp lệ cho tài khoản này, chuyển đổi tức thì
+    const cached = demoTokenCache.get(fallbackEmail);
+    if (cached && cached.expiresAt > Date.now() + 60000 && cached.user) {
+      mf.state.token = cached.accessToken;
+      mf.state.refreshToken = cached.refreshToken;
+      mf.state.user = cached.user;
+      mf.state.view = mf.state.user.role === "DRIVER" ? "tasks" : "dashboard";
+      try {
+        localStorage.setItem("moveflow_auth", JSON.stringify({
+          token: cached.accessToken,
+          refreshToken: cached.refreshToken,
+          user: cached.user
+        }));
+      } catch { /* ignore */ }
+      mf.renderShell();
+      await mf.renderView();
+      return;
+    }
+
+    mf.showToast?.(`Chuyển sang ${fallbackEmail} để thực hiện tác vụ…`, "info");
+    const user = await mf.loginAs(fallbackEmail, "admin");
+    if (user && mf.state?.token) {
+      demoTokenCache.set(fallbackEmail, {
+        accessToken: mf.state.token,
+        refreshToken: mf.state.refreshToken,
+        user: mf.state.user,
+        expiresAt: Date.now() + 840000
+      });
     }
   }
 
-  // Helper: Đảm bảo Driver A sẵn sàng (AVAILABLE + Fresh GPS) để hệ thống điều phối tìm thấy
+  // Helper: Đảm bảo Driver A sẵn sàng (AVAILABLE + Fresh GPS + Giải phóng đơn cũ) để hệ thống điều phối luôn tìm thấy
   async function ensureDriverReady() {
     const mf = getMf();
     if (!mf) return;
+    const apiBase = getApiBase();
     try {
-      const loginRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "driver-a@gmail.com", password: "admin" })
+      const driverToken = await getDemoAccountToken("driver-a@gmail.com", "admin");
+      if (!driverToken) return;
+
+      const adminToken = await getAdminToken();
+
+      // Giải phóng mọi nhiệm vụ còn dở dang của Driver A từ các lần demo trước
+      const tasksRes = await fetch(`${apiBase}/drivers/me/tasks`, {
+        headers: { Authorization: `Bearer ${driverToken}` }
       });
-      const data = await loginRes.json();
-      if (data?.accessToken) {
-        await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/drivers/me/status`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.accessToken}` },
-          body: JSON.stringify({ status: "AVAILABLE" })
-        });
-        localStorage.setItem("moveflow_driver_status_driver-a@gmail.com", "AVAILABLE");
-        const readyPt = {
-          lat: Number((SAMPLES.pickup.lat + 0.00008).toFixed(6)),
-          lng: Number((SAMPLES.pickup.lng + 0.00008).toFixed(6))
-        };
-        const locRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/drivers/me/location`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.accessToken}` },
-          body: JSON.stringify({
-            lat: readyPt.lat,
-            lng: readyPt.lng,
-            accuracyM: 10,
-            capturedAt: new Date().toISOString()
-          })
-        });
-        const locJson = await locRes.json().catch(() => null);
-        if (locJson?.accepted) {
-          lastServerSync = { time: Date.now(), point: readyPt };
+      const tasks = await tasksRes.json().catch(() => []);
+      if (Array.isArray(tasks)) {
+        for (const t of tasks) {
+          if (t.status === "PENDING") {
+            await fetch(`${apiBase}/assignments/${t.id}/respond`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${driverToken}` },
+              body: JSON.stringify({ action: "REJECT" })
+            }).catch(() => null);
+          } else if (t.status === "ACCEPTED" && t.shipmentId && adminToken) {
+            await fetch(`${apiBase}/shipments/${t.shipmentId}/transition`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+              body: JSON.stringify({ toStatus: "CANCELLED", reason: "Demo reset stale task" })
+            }).catch(() => null);
+          }
         }
+      }
+
+      await fetch(`${apiBase}/drivers/me/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${driverToken}` },
+        body: JSON.stringify({ status: "AVAILABLE" })
+      }).catch(() => null);
+      localStorage.setItem("moveflow_driver_status_driver-a@gmail.com", "AVAILABLE");
+
+      const readyPt = {
+        lat: Number((SAMPLES.pickup.lat + 0.00008).toFixed(6)),
+        lng: Number((SAMPLES.pickup.lng + 0.00008).toFixed(6))
+      };
+      const locRes = await fetch(`${apiBase}/drivers/me/location`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${driverToken}` },
+        body: JSON.stringify({
+          lat: readyPt.lat,
+          lng: readyPt.lng,
+          accuracyM: 10,
+          capturedAt: new Date().toISOString()
+        })
+      });
+      const locJson = await locRes.json().catch(() => null);
+      if (locJson?.accepted) {
+        lastServerSync = { time: Date.now(), point: readyPt };
       }
     } catch (e) {
       console.warn("ensureDriverReady warning:", e);
@@ -319,25 +411,21 @@
     const payload = reason ? { toStatus, reason: String(reason).trim() } : { toStatus };
     try {
       return await mf.post(`/shipments/${shipmentId}/transition`, payload);
-    } catch {
-      const apiBase = mf?.state?.apiBase || location.origin + "/api/v1";
-      const adminLogin = await fetch(`${apiBase}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "admin@gmail.com", password: "admin" })
-      });
-      const adminData = await adminLogin.json();
-      if (!adminData?.accessToken) throw new Error("Không thể xác thực quyền Admin dự phòng");
+    } catch (driverErr) {
+      const adminToken = await getAdminToken();
+      if (!adminToken) throw driverErr;
+      const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/shipments/${shipmentId}/transition`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminData.accessToken}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify(payload)
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.message || `Không thể chuyển sang ${toStatus}`);
+        const msg = data?.message || data?.error?.message || (typeof data?.error === "string" ? data.error : null) || `Không thể chuyển sang ${toStatus}`;
+        throw new Error(msg);
       }
-      return res.json();
+      return data;
     }
   }
 
@@ -684,6 +772,7 @@
     // 01. Quick Shipment Creation
     host.querySelector("#btn-quick-create-shipment")?.addEventListener("click", async () => {
       try {
+        await ensureDriverReady();
         await ensureRole(["SENDER", "ADMIN"], "sender@gmail.com");
         const payload = {
           pickupAddress: SAMPLES.pickup,
@@ -692,7 +781,9 @@
           serviceType: SAMPLES.serviceType
         };
         const result = await mf.post("/shipments", payload);
-        mf.showToast("Đã tạo thành công đơn hàng #" + (result.trackingCode || result.id.slice(0, 8)) + "!");
+        sessionStorage.setItem("moveflow_demo_shipment_id", result.id);
+        const code = result.trackingCode || result.id.slice(0, 8);
+        mf.showToast("Đã tạo thành công đơn hàng #" + code + "!", "success");
         overlay.classList.remove("open");
         if (mf.state) {
           mf.state.detail = result.id;
@@ -701,46 +792,98 @@
           await mf.renderView();
         }
       } catch (err) {
-        mf?.showToast(err.message, "error");
+        mf?.showToast("Tạo đơn lỗi: " + err.message, "error");
       }
     });
 
     // 02. Quick Dispatch
     host.querySelector("#btn-quick-dispatch")?.addEventListener("click", async () => {
       try {
-        await ensureDriverReady();
+        const lastShipmentId = sessionStorage.getItem("moveflow_demo_shipment_id");
         await ensureRole(["DISPATCHER", "ADMIN"], "dispatcher@gmail.com");
+
+        // 1. Kiểm tra xem Driver A đã có cuốc PENDING nào chưa
+        const driverToken = (await (await fetch(`${getApiBase()}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "driver-a@gmail.com", password: "admin" })
+        })).json().catch(() => null))?.accessToken;
+
+        let activePendingTask = null;
+        if (driverToken) {
+          const dTasks = await (await fetch(`${getApiBase()}/drivers/me/tasks`, {
+            headers: { Authorization: `Bearer ${driverToken}` }
+          })).json().catch(() => []);
+          activePendingTask = Array.isArray(dTasks) ? dTasks.find(t => t.status === "PENDING") : null;
+        }
+
+        if (activePendingTask) {
+          const code = activePendingTask.shipment?.trackingCode || activePendingTask.shipmentId.slice(0, 8);
+          mf.showToast(`Đơn hàng #${code} đã được điều phối cho Tài xế A! (Đang chờ nhận cuốc)`, "info");
+          overlay.classList.remove("open");
+          mf.state.view = "dashboard";
+          mf.renderShell();
+          await mf.renderView();
+          return;
+        }
+
+        // 2. Tìm đơn trong hàng chờ điều phối
         let queue = await mf.get("/dispatch/queue");
-        if (!queue || queue.length === 0) {
-          mf.showToast("Hàng chờ trống. Đang tự động tạo đơn mẫu để điều phối…", "info");
-          const sRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/auth/login`, {
+        let targetShipmentId = null;
+
+        if (lastShipmentId) {
+          const found = (Array.isArray(queue) ? queue : []).find(s => s.id === lastShipmentId);
+          if (found) targetShipmentId = found.id;
+        }
+
+        if (!targetShipmentId && Array.isArray(queue) && queue.length > 0) {
+          targetShipmentId = queue[0].id;
+        }
+
+        // 3. Nếu hàng chờ trống, tự động tạo đơn mới
+        if (!targetShipmentId) {
+          mf.showToast("Đang tạo đơn mẫu mới để điều phối…", "info");
+          await ensureDriverReady();
+          const senderToken = (await (await fetch(`${getApiBase()}/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: "sender@gmail.com", password: "admin" })
-          });
-          const sData = await sRes.json();
-          await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/shipments`, {
+          })).json().catch(() => null))?.accessToken;
+
+          const newShip = await (await fetch(`${getApiBase()}/shipments`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${sData.accessToken}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${senderToken}` },
             body: JSON.stringify({
               pickupAddress: SAMPLES.pickup,
               dropoffAddress: SAMPLES.dropoff,
               parcel: SAMPLES.parcel,
               serviceType: SAMPLES.serviceType
             })
-          });
-          queue = await mf.get("/dispatch/queue");
+          })).json().catch(() => null);
+
+          if (newShip?.id) {
+            sessionStorage.setItem("moveflow_demo_shipment_id", newShip.id);
+            targetShipmentId = newShip.id;
+          }
         }
 
-        if (queue && queue.length > 0) {
-          const top = queue[0];
-          const res = await mf.post(`/shipments/${top.id}/assign-driver`, {});
-          mf.showToast(res.assignment ? "Đã điều phối đơn #" + (top.trackingCode || top.id.slice(0, 8)) + " cho Tài xế!" : "Đã gửi đề nghị phân công đơn hàng.");
+        if (targetShipmentId) {
+          await ensureDriverReady();
+          const res = await mf.post(`/shipments/${targetShipmentId}/assign-driver`, {});
+          if (res?.assignment) {
+            mf.showToast("Đã điều phối đơn hàng thành công cho Tài xế A!", "success");
+          } else {
+            mf.showToast("Hệ thống đã gửi đề nghị phân công đơn hàng cho Tài xế!", "info");
+          }
           overlay.classList.remove("open");
+          mf.state.view = "dashboard";
+          mf.renderShell();
           await mf.renderView();
+        } else {
+          mf.showToast("Không tìm thấy đơn hàng cần điều phối.", "info");
         }
       } catch (err) {
-        mf?.showToast(err.message, "error");
+        mf?.showToast("Điều phối lỗi: " + err.message, "error");
       }
     });
 
@@ -748,20 +891,66 @@
     host.querySelector("#btn-driver-accept")?.addEventListener("click", async () => {
       try {
         await ensureRole("DRIVER", "driver-a@gmail.com");
-        const tasks = await mf.get("/drivers/me/tasks");
-        const pending = (Array.isArray(tasks) ? tasks : []).find(t => t.status === "PENDING");
+        let tasks = await mf.get("/drivers/me/tasks");
+        let pending = (Array.isArray(tasks) ? tasks : []).find(t => t.status === "PENDING");
+
         if (!pending) {
-          mf.showToast("Không có đơn chờ nào. Hãy bấm 'Điều phối đơn hàng' trước.", "info");
-          return;
+          const active = (Array.isArray(tasks) ? tasks : []).find(t =>
+            t.status === "ACCEPTED" &&
+            t.shipment &&
+            !["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(t.shipment.status)
+          );
+          if (active) {
+            const code = active.shipment?.trackingCode || active.shipmentId.slice(0, 8);
+            mf.showToast(`Tài xế A đã nhận đơn #${code} rồi (sẵn sàng lấy hàng)!`, "info");
+            overlay.classList.remove("open");
+            mf.state.view = "tasks";
+            mf.renderShell();
+            await mf.renderView();
+            return;
+          }
+
+          // Chưa có đơn nào: Tạo và điều phối nhanh
+          mf.showToast("Đang chuẩn bị đơn hàng mới cho Tài xế A…", "info");
+          await ensureDriverReady();
+          const senderToken = (await (await fetch(`${getApiBase()}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: "sender@gmail.com", password: "admin" })
+          })).json().catch(() => null))?.accessToken;
+
+          const newShip = await (await fetch(`${getApiBase()}/shipments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${senderToken}` },
+            body: JSON.stringify({
+              pickupAddress: SAMPLES.pickup,
+              dropoffAddress: SAMPLES.dropoff,
+              parcel: SAMPLES.parcel,
+              serviceType: SAMPLES.serviceType
+            })
+          })).json().catch(() => null);
+
+          if (newShip?.id) {
+            sessionStorage.setItem("moveflow_demo_shipment_id", newShip.id);
+          }
+          await sleep(500);
+          tasks = await mf.get("/drivers/me/tasks");
+          pending = (Array.isArray(tasks) ? tasks : []).find(t => t.status === "PENDING");
         }
-        await mf.post(`/assignments/${pending.id}/respond`, { action: "ACCEPT" });
-        mf.showToast("Tài xế đã nhận đơn hàng thành công!");
+
+        if (pending) {
+          await mf.post(`/assignments/${pending.id}/respond`, { action: "ACCEPT" });
+          mf.showToast("Tài xế A đã nhận đơn hàng thành công! 🎉", "success");
+        } else {
+          mf.showToast("Không tìm thấy đơn hàng chờ nhận.", "info");
+        }
+
         overlay.classList.remove("open");
         mf.state.view = "tasks";
         mf.renderShell();
         await mf.renderView();
       } catch (err) {
-        mf?.showToast(err.message, "error");
+        mf?.showToast("Nhận đơn lỗi: " + err.message, "error");
       }
     });
 
@@ -770,31 +959,46 @@
       try {
         stopMovementSimulation();
         await ensureRole("DRIVER", "driver-a@gmail.com");
-        const tasks = await mf.get("/drivers/me/tasks");
-        const active = (Array.isArray(tasks) ? tasks : []).find(t =>
+        let tasks = await mf.get("/drivers/me/tasks");
+        let active = (Array.isArray(tasks) ? tasks : []).find(t =>
           t.status === "ACCEPTED" &&
           t.shipment &&
           !["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(t.shipment.status)
         );
+
         if (!active) {
-          mf.showToast("Tài xế chưa có đơn nào đang nhận.", "info");
+          const pending = (Array.isArray(tasks) ? tasks : []).find(t => t.status === "PENDING");
+          if (pending) {
+            await mf.post(`/assignments/${pending.id}/respond`, { action: "ACCEPT" });
+            tasks = await mf.get("/drivers/me/tasks");
+            active = (Array.isArray(tasks) ? tasks : []).find(t => t.id === pending.id);
+          }
+        }
+
+        if (!active) {
+          mf.showToast("Tài xế chưa có đơn nào đang nhận. Hãy bấm '01. Tạo đơn' trước.", "info");
           return;
         }
+
         const shipmentId = active.shipmentId;
         const pLat = Number(((active.shipment?.pickup?.lat ?? SAMPLES.pickup.lat) + 0.00008).toFixed(6));
         const pLng = Number(((active.shipment?.pickup?.lng ?? SAMPLES.pickup.lng) + 0.00008).toFixed(6));
         await pushLocationToServer({ lat: pLat, lng: pLng }, 5);
         mf.getActiveDriverTripController?.()?.setMockLocation?.({ lat: pLat, lng: pLng }, true);
 
-        if (active.shipment.status === "EN_ROUTE_PICKUP" || active.shipment.status === "RECEIVED") {
+        const currentStatus = active.shipment?.status || "EN_ROUTE_PICKUP";
+        if (["EN_ROUTE_PICKUP", "RECEIVED"].includes(currentStatus)) {
           await transitionWithInstantFallback(shipmentId, "ARRIVED_PICKUP");
         }
         await transitionWithInstantFallback(shipmentId, "OUT_FOR_DELIVERY");
-        mf.showToast("Tài xế đã đến điểm A và nhận hàng (Bắt đầu đi giao)!");
+
+        mf.showToast("Tài xế đã đến điểm A và nhận hàng (Bắt đầu đi giao)! 📦", "success");
         overlay.classList.remove("open");
+        mf.state.view = "tasks";
+        mf.renderShell();
         await mf.renderView();
       } catch (err) {
-        mf?.showToast(err.message, "error");
+        mf?.showToast("Lấy hàng lỗi: " + err.message, "error");
       }
     });
 
@@ -804,39 +1008,52 @@
         stopMovementSimulation();
         stopKeepAlive();
         await ensureRole("DRIVER", "driver-a@gmail.com");
-        const tasks = await mf.get("/drivers/me/tasks");
-        const active = (Array.isArray(tasks) ? tasks : []).find(t =>
+        let tasks = await mf.get("/drivers/me/tasks");
+        let active = (Array.isArray(tasks) ? tasks : []).find(t =>
           t.status === "ACCEPTED" &&
           t.shipment &&
           !["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(t.shipment.status)
         );
+
         if (!active) {
-          mf.showToast("Tài xế chưa có đơn nào đang nhận.", "info");
+          const pending = (Array.isArray(tasks) ? tasks : []).find(t => t.status === "PENDING");
+          if (pending) {
+            await mf.post(`/assignments/${pending.id}/respond`, { action: "ACCEPT" });
+            tasks = await mf.get("/drivers/me/tasks");
+            active = (Array.isArray(tasks) ? tasks : []).find(t => t.id === pending.id);
+          }
+        }
+
+        if (!active) {
+          mf.showToast("Tài xế chưa có đơn nào đang giao.", "info");
           return;
         }
+
         const shipmentId = active.shipmentId;
         const dLat = Number(((active.shipment?.dropoff?.lat ?? SAMPLES.dropoff.lat) + 0.00008).toFixed(6));
         const dLng = Number(((active.shipment?.dropoff?.lng ?? SAMPLES.dropoff.lng) + 0.00008).toFixed(6));
         await pushLocationToServer({ lat: dLat, lng: dLng }, 5);
         mf.getActiveDriverTripController?.()?.setMockLocation?.({ lat: dLat, lng: dLng }, true);
 
-        if (["EN_ROUTE_PICKUP", "RECEIVED"].includes(active.shipment.status)) {
+        const currentStatus = active.shipment?.status || "EN_ROUTE_PICKUP";
+        if (["EN_ROUTE_PICKUP", "RECEIVED"].includes(currentStatus)) {
           await transitionWithInstantFallback(shipmentId, "ARRIVED_PICKUP");
           await transitionWithInstantFallback(shipmentId, "OUT_FOR_DELIVERY");
-        } else if (active.shipment.status === "ARRIVED_PICKUP") {
+        } else if (currentStatus === "ARRIVED_PICKUP") {
           await transitionWithInstantFallback(shipmentId, "OUT_FOR_DELIVERY");
         }
-        if (["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(active.shipment.status) || active.shipment.status !== "ARRIVED_DROPOFF") {
-          try { await transitionWithInstantFallback(shipmentId, "ARRIVED_DROPOFF"); } catch { /* ok */ }
-        }
+        await transitionWithInstantFallback(shipmentId, "ARRIVED_DROPOFF");
         await transitionWithInstantFallback(shipmentId, "DELIVERED");
+
         window.MoveFlowSfx?.play("delivered");
         window.MoveFlowSfx?.triggerConfetti();
         mf.showToast("Đơn hàng đã được giao thành công! 🎉", "success");
         overlay.classList.remove("open");
+        mf.state.view = "tasks";
+        mf.renderShell();
         await mf.renderView();
       } catch (err) {
-        mf?.showToast(err.message, "error");
+        mf?.showToast("Giao hàng lỗi: " + err.message, "error");
       }
     });
 
@@ -858,31 +1075,36 @@
           parcel: SAMPLES.parcel,
           serviceType: SAMPLES.serviceType
         });
+        sessionStorage.setItem("moveflow_demo_shipment_id", shipment.id);
         mf.state.detail = shipment.id;
         mf.state.view = "details";
         mf.renderShell();
         await mf.renderView();
 
-        await new Promise(r => setTimeout(r, 1200));
+        await sleep(1000);
 
-        mf.showToast("02/05: Điều phối viên phân công cho Tài xế A...", "info");
+        mf.showToast("02/05: Điều phối đơn hàng cho Tài xế A...", "info");
         await ensureRole(["DISPATCHER", "ADMIN"], "dispatcher@gmail.com");
-        await mf.post(`/shipments/${shipment.id}/assign-driver`, {});
+        try {
+          await mf.post(`/shipments/${shipment.id}/assign-driver`, {});
+        } catch { /* đã được tự động điều phối khi tạo đơn */ }
 
-        await new Promise(r => setTimeout(r, 1200));
+        await sleep(1000);
 
         mf.showToast("03/05: Tài xế A nhận đơn & Đến lấy hàng...", "info");
         await ensureRole("DRIVER", "driver-a@gmail.com");
         const tasks = await mf.get("/drivers/me/tasks");
-        const pending = (Array.isArray(tasks) ? tasks : []).find(t => t.shipmentId === shipment.id);
-        if (pending) {
+        const pending = (Array.isArray(tasks) ? tasks : []).find(t => t.shipmentId === shipment.id || t.status === "PENDING");
+        if (pending && pending.status === "PENDING") {
           await mf.post(`/assignments/${pending.id}/respond`, { action: "ACCEPT" });
         }
+
         await pushLocationToServer({
           lat: SAMPLES.pickup.lat + 0.00008,
           lng: SAMPLES.pickup.lng + 0.00008
         }, 5);
-        await new Promise(r => setTimeout(r, 800));
+
+        await sleep(600);
         await transitionWithInstantFallback(shipment.id, "ARRIVED_PICKUP");
         await transitionWithInstantFallback(shipment.id, "OUT_FOR_DELIVERY");
 
@@ -891,11 +1113,12 @@
         mf.renderShell();
         await mf.renderView();
 
-        await new Promise(r => setTimeout(r, 1500));
+        await sleep(1200);
         await pushLocationToServer({
           lat: SAMPLES.dropoff.lat + 0.00008,
           lng: SAMPLES.dropoff.lng + 0.00008
         }, 5);
+
         await transitionWithInstantFallback(shipment.id, "ARRIVED_DROPOFF");
         await transitionWithInstantFallback(shipment.id, "DELIVERED");
 
@@ -996,15 +1219,10 @@
         mf.showToast?.("Đang chuẩn bị chuyến đi mẫu cho tài xế…", "info");
         await ensureDriverReady();
 
-        const sRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/auth/login`, {
+        const senderToken = await getDemoAccountToken("sender@gmail.com");
+        const shipRes = await fetch(`${getApiBase()}/shipments`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "sender@gmail.com", password: "admin" })
-        });
-        const sData = await sRes.json();
-        const shipRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/shipments`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${sData.accessToken}` },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${senderToken}` },
           body: JSON.stringify({
             pickupAddress: SAMPLES.pickup,
             dropoffAddress: SAMPLES.dropoff,
@@ -1012,20 +1230,15 @@
             serviceType: SAMPLES.serviceType
           })
         });
-        const shipData = await shipRes.json();
+        const shipData = await shipRes.json().catch(() => null);
 
         if (shipData?.id) {
-          const dRes = await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/auth/login`, {
+          const dispToken = await getDemoAccountToken("dispatcher@gmail.com");
+          await fetch(`${getApiBase()}/shipments/${shipData.id}/assign-driver`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: "dispatcher@gmail.com", password: "admin" })
-          });
-          const dData = await dRes.json();
-          await fetch(`${mf.state?.apiBase || location.origin + "/api/v1"}/shipments/${shipData.id}/assign-driver`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${dData.accessToken}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${dispToken}` },
             body: JSON.stringify({})
-          });
+          }).catch(() => null);
 
           const driverTasks = await mf.get("/drivers/me/tasks");
           const newPending = (Array.isArray(driverTasks) ? driverTasks : []).find(t => t.shipmentId === shipData.id);
