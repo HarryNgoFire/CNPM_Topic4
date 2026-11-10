@@ -252,8 +252,8 @@ export class DispatchService {
         current: {
           lat: input.lat,
           lng: input.lng,
-          accuracyM: input.accuracyM ?? 10,
-          capturedAt: input.capturedAt ?? serverNow.toISOString(),
+          accuracyM: input.accuracyM,
+          capturedAt: input.capturedAt,
         },
         prior: priorData,
         serverNow,
@@ -263,8 +263,7 @@ export class DispatchService {
         throw new BadRequestException(evalResult.error);
       }
 
-      const capturedAtIso =
-        input.capturedAt ?? serverNow.toISOString();
+      const capturedAtIso = input.capturedAt;
       const receivedAtIso = serverNow.toISOString();
 
       if (!evalResult.accepted) {
@@ -283,7 +282,7 @@ export class DispatchService {
         UPDATE "Driver" SET
           "currentLocation" = ST_SetSRID(ST_MakePoint(${input.lng}, ${input.lat}), 4326)::geography,
           "lastLocationAt" = ${serverNow},
-          "locationAccuracyM" = ${input.accuracyM ?? 10},
+          "locationAccuracyM" = ${input.accuracyM},
           "locationCapturedAt" = ${capturedDate}
         WHERE id = ${driver.id}::uuid
       `;

@@ -3891,7 +3891,9 @@
         },
         "required": [
           "lat",
-          "lng"
+          "lng",
+          "accuracyM",
+          "capturedAt"
         ]
       },
       "DriverStatusDto": {
@@ -5175,6 +5177,16 @@
               "eligible",
               "distanceM"
             ]
+          },
+          "routingError": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -5184,7 +5196,8 @@
           "currentLocation",
           "destination",
           "route",
-          "arrival"
+          "arrival",
+          "routingError"
         ]
       },
       "LiveTrackingResponse": {

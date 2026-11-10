@@ -14,6 +14,8 @@ const GPS_THROTTLE = {
   MIN_DISTANCE_M: 15,
   STATIONARY_HEARTBEAT_MS: 60000,
   OFF_ROUTE_REROUTE_DELAY_MS: 20000,
+  ARRIVAL_RADIUS_M: 100,
+  GEOFENCE_MAX_ACCURACY_M: 50,
 };
 
 export class DriverTripController {
@@ -45,7 +47,9 @@ export class DriverTripController {
 
     this.lastUploadedGps = null;
     this.lastUploadTime = 0;
+    this.pendingUpload = null;
     this.firstOffRouteTime = null;
+    this._visibilityHandler = null;
   }
 
   async mount() {
@@ -58,6 +62,17 @@ export class DriverTripController {
 
     if (this.phase !== "COMPLETE") {
       this.startTracking();
+    }
+
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      this._visibilityHandler = () => {
+        if (document.hidden) {
+          this.stopTracking();
+        } else if (this.phase !== "COMPLETE") {
+          this.startTracking();
+        }
+      };
+      document.addEventListener("visibilitychange", this._visibilityHandler);
     }
   }
 
@@ -167,15 +182,18 @@ export class DriverTripController {
     }
 
     // Throttling logic for backend upload
-    const timeSinceLast = now - this.lastUploadTime;
+    const baseline = this.pendingUpload || (this.lastUploadedGps
+      ? { point: this.lastUploadedGps, now: this.lastUploadTime }
+      : null);
 
-    if (!this.lastUploadedGps) {
+    if (!baseline) {
       // First point uploads immediately
       this.uploadGps(point, now);
       return;
     }
 
-    const distMoved = haversineMeters(this.lastUploadedGps, point);
+    const timeSinceLast = now - baseline.now;
+    const distMoved = haversineMeters(baseline.point, point);
 
     // Minimum interval 5 seconds
     if (timeSinceLast < GPS_THROTTLE.MIN_INTERVAL_MS) {
@@ -194,20 +212,40 @@ export class DriverTripController {
   }
 
   async uploadGps(point, now) {
-    this.lastUploadedGps = point;
-    this.lastUploadTime = now;
+    if (this.pendingUpload) return;
+    const pendingUpload = { point, now };
+    this.pendingUpload = pendingUpload;
 
     try {
-      await this.api.patch("/drivers/me/location", {
+      const result = await this.api.patch("/drivers/me/location", {
         lat: point.lat,
         lng: point.lng,
         accuracyM: point.accuracyM,
         capturedAt: point.capturedAt || new Date(now).toISOString(),
       });
-      // Refresh navigation to evaluate arrival eligibility against latest GPS
-      await this.refreshNavigation();
+      if (!result?.accepted) return;
+
+      this.lastUploadedGps = point;
+      this.lastUploadTime = now;
+      if (this.destination) {
+        const distanceM = Math.round(haversineMeters(point, this.destination));
+        this.arrival = {
+          eligible:
+            distanceM <= GPS_THROTTLE.ARRIVAL_RADIUS_M &&
+            Number(point.accuracyM) > 0 &&
+            Number(point.accuracyM) <= GPS_THROTTLE.GEOFENCE_MAX_ACCURACY_M,
+          distanceM,
+        };
+        if (this.onStateChanged) {
+          this.onStateChanged({ type: "GPS_UPDATED", arrival: this.arrival });
+        }
+      }
     } catch {
-      // upload error: keep current point as latest unsent
+      // A later GPS callback retries because the successful baseline is unchanged.
+    } finally {
+      if (this.pendingUpload === pendingUpload) {
+        this.pendingUpload = null;
+      }
     }
   }
 
@@ -244,6 +282,10 @@ export class DriverTripController {
 
   destroy() {
     this.stopTracking();
+    if (this._visibilityHandler && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      document.removeEventListener("visibilitychange", this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
     this.navReq.abort();
     if (this.engine) {
       this.engine.destroy();

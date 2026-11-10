@@ -12,7 +12,7 @@ describe("Shipment state machine and ownership", () => {
       findMany: jest.fn(),
     },
     driverAssignment: { findFirst: jest.fn(), update: jest.fn() },
-    driver: { update: jest.fn() },
+    driver: { update: jest.fn(), findFirst: jest.fn() },
     shipmentStatusHistory: { create: jest.fn() },
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
@@ -81,6 +81,22 @@ describe("Shipment state machine and ownership", () => {
     expect(
       (await service.transition("ship", "RECEIVED", actor)) as any,
     ).toHaveProperty("idempotent", true);
+    expect(events.record).not.toHaveBeenCalled();
+  });
+    it("allows idempotent retry of DELIVERED when assignment is already COMPLETED", async () => {
+    db.shipment.findUnique.mockResolvedValue({
+      ...shipment,
+      status: "DELIVERED",
+    });
+    db.driverAssignment.findFirst.mockResolvedValue({
+      id: "a-1",
+      shipmentId: "ship",
+      driverId: "driver-1",
+      status: "COMPLETED",
+      driver: { userId: actor.sub },
+    });
+    const result = await service.transition("ship", "DELIVERED", actor);
+    expect(result).toHaveProperty("idempotent", true);
     expect(events.record).not.toHaveBeenCalled();
   });
   it("checks ownership even for repeated requests", async () => {
@@ -355,6 +371,16 @@ describe("Shipment state machine and ownership", () => {
       await expect(service.navigation("ship", actor)).rejects.toThrow();
     });
 
+    it("rejects a driver whose assignment is no longer accepted", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue({
+        id: "old-assignment",
+        driverId: "driver-1",
+        status: "REJECTED",
+        driver: { userId: actor.sub },
+      });
+      await expect(service.navigation("ship", actor)).rejects.toThrow();
+    });
+
     it("allows assigned driver with 200", async () => {
       const res = await service.navigation("ship", actor);
       expect(res.shipmentId).toBe("ship");
@@ -366,6 +392,24 @@ describe("Shipment state machine and ownership", () => {
       expect(res.shipmentId).toBe("ship");
     });
 
+        it("surfaces routingError when routing service fails in navigation", async () => {
+      db.shipment.findUnique.mockResolvedValue({
+        ...shipment,
+        senderId: "sender-1",
+        status: "EN_ROUTE_PICKUP",
+        pickupAddressId: "addr-p",
+        dropoffAddressId: "addr-d",
+      });
+      db.$queryRaw
+        .mockResolvedValueOnce([{ ...pickupCoords, ...dropoffCoords }])
+        .mockResolvedValueOnce([driverLoc]);
+
+      routing.getRoute.mockRejectedValueOnce(new Error("OSRM unreachable"));
+
+      const res = await service.navigation("ship", actor);
+      expect(res.route).toBeNull();
+      expect(res.routingError).toBe("OSRM unreachable");
+    });
     it("returns TO_PICKUP and pickup route for EN_ROUTE_PICKUP", async () => {
       db.shipment.findUnique.mockResolvedValue({
         ...shipment,
@@ -532,8 +576,19 @@ describe("Shipment state machine and ownership", () => {
       ).rejects.toThrow();
     });
 
+    it("rejects a driver whose assignment is no longer accepted", async () => {
+      db.driverAssignment.findFirst.mockResolvedValue({
+        id: "old-assignment",
+        driverId: "driver-1",
+        status: "EXPIRED",
+      });
+      await expect(
+        service.live("ship", { sub: "driver-user-id", role: "DRIVER" }),
+      ).rejects.toThrow();
+    });
+
     it("allows assigned driver, dispatcher, and admin", async () => {
-      db.driverAssignment.findFirst.mockResolvedValue({ id: "a1", driverId: "driver-1" });
+      db.driverAssignment.findFirst.mockResolvedValue({ id: "a1", driverId: "driver-1", status: "ACCEPTED" });
       const r1 = await service.live("ship", { sub: "driver-user-id", role: "DRIVER" });
       expect(r1.driver).toBeDefined();
 

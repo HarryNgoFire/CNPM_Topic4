@@ -116,7 +116,7 @@ test("DriverTripController - phase transitions: TO_PICKUP draws A only; AT_PICKU
   assert.ok(routeSet);
 });
 
-test("DriverTripController - GPS throttle: skips < 5s or < 15m unless stationary 60s heartbeat", () => {
+test("DriverTripController - GPS throttle: skips < 5s or < 15m unless stationary 60s heartbeat", async () => {
   const uploads = [];
   const mockApi = {
     get: async () => ({
@@ -152,6 +152,7 @@ test("DriverTripController - GPS throttle: skips < 5s or < 15m unless stationary
   const t0 = 100000;
   // Point 1: First point uploads immediately
   controller.handleDeviceGps({ lat: 10.75, lng: 106.66, accuracyM: 10, capturedAt: new Date(t0).toISOString() }, t0);
+  await Promise.resolve();
   assert.equal(uploads.length, 1);
 
   // Point 2: 3 seconds later (< 5s) -> skipped
@@ -164,11 +165,51 @@ test("DriverTripController - GPS throttle: skips < 5s or < 15m unless stationary
 
   // Point 4: 10s later, moved 50m (> 15m, > 5s) -> uploaded
   controller.handleDeviceGps({ lat: 10.75045, lng: 106.66, accuracyM: 10, capturedAt: new Date(t0 + 10000).toISOString() }, t0 + 10000);
+  await Promise.resolve();
   assert.equal(uploads.length, 2);
 
   // Point 5: Stationary heartbeat 65s later even with 0m movement -> uploaded
   controller.handleDeviceGps({ lat: 10.75045, lng: 106.66, accuracyM: 10, capturedAt: new Date(t0 + 75000).toISOString() }, t0 + 75000);
+  await Promise.resolve();
   assert.equal(uploads.length, 3);
+});
+
+test("DriverTripController - failed GPS upload is retried instead of advancing the throttle baseline", async () => {
+  const point = { lat: 10.75, lng: 106.66, accuracyM: 10, capturedAt: "2026-11-10T02:00:00.000Z" };
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-1",
+    api: { patch: async () => { throw new Error("offline"); } },
+  });
+
+  await controller.uploadGps(point, 100000);
+
+  assert.equal(controller.lastUploadedGps, null);
+  assert.equal(controller.lastUploadTime, 0);
+});
+
+test("DriverTripController - accepted GPS upload updates arrival without requesting a new route", async () => {
+  let navigationCalls = 0;
+  let stateEvent = null;
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-1",
+    api: { patch: async () => ({ accepted: true }) },
+    onStateChanged: (event) => { stateEvent = event; },
+  });
+  controller.destination = { kind: "PICKUP", lat: 10.75, lng: 106.66 };
+  controller.refreshNavigation = async () => { navigationCalls += 1; };
+
+  await controller.uploadGps({
+    lat: 10.7501,
+    lng: 106.6601,
+    accuracyM: 10,
+    capturedAt: "2026-11-10T02:00:00.000Z",
+  }, 100000);
+
+  assert.equal(navigationCalls, 0);
+  assert.equal(controller.arrival.eligible, true);
+  assert.equal(stateEvent.type, "GPS_UPDATED");
 });
 
 test("DriverTripController - terminal state stops tracking and releases resources", async () => {
@@ -220,4 +261,62 @@ test("DriverTripController - terminal state stops tracking and releases resource
   await controller.confirmDelivery();
   assert.equal(controller.phase, "COMPLETE");
   assert.equal(watchStopped, true);
+});
+
+test("DriverTripController - pauses tracking when document is hidden and resumes when visible", async () => {
+  let watchStarts = 0;
+  let watchStops = 0;
+
+  const listeners = {};
+  const mockDoc = {
+    hidden: false,
+    addEventListener: (event, handler) => { listeners[event] = handler; },
+    removeEventListener: (event) => { delete listeners[event]; },
+  };
+  global.document = mockDoc;
+
+  const controller = new DriverTripController({
+    mapElement: createMockElement(),
+    shipmentId: "ship-1",
+    api: {
+      get: async () => ({
+        phase: "TO_PICKUP",
+        shipmentStatus: "EN_ROUTE_PICKUP",
+        destination: { kind: "PICKUP", lat: 10.75, lng: 106.66 },
+        route: null,
+      }),
+    },
+    MapEngineClass: class {
+      ready() { return Promise.resolve(); }
+      setEndpoints() {}
+      setRoute() {}
+      setDriverLocation() {}
+      fitRelevantPoints() {}
+      destroy() {}
+    },
+    geolocation: {
+      startLocationWatch: () => {
+        watchStarts++;
+        return () => { watchStops++; };
+      },
+    },
+  });
+
+  await controller.mount();
+  assert.equal(watchStarts, 1);
+  assert.equal(watchStops, 0);
+
+  // Tab hidden -> pauses tracking
+  mockDoc.hidden = true;
+  listeners.visibilitychange();
+  assert.equal(watchStops, 1);
+
+  // Tab visible again -> resumes tracking
+  mockDoc.hidden = false;
+  listeners.visibilitychange();
+  assert.equal(watchStarts, 2);
+
+  controller.destroy();
+  assert.equal(listeners.visibilitychange, undefined);
+  delete global.document;
 });

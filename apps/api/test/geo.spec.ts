@@ -145,8 +145,8 @@ describe("GPS and Geo pure functions", () => {
       expect(result).toMatchObject({ accepted: true, distanceM: 0, durationMs: 0 });
     });
 
-    it("rejects stale timestamp (>300s)", () => {
-      const staleTime = new Date(baseTime.getTime() - 301000);
+    it("rejects stale timestamp (>120s)", () => {
+      const staleTime = new Date(baseTime.getTime() - 121000);
       const result = evaluateDriverGps({
         current: {
           lat: d1.lat,

@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { Prisma, ShipmentStatus } from "@prisma/client";
+import { AssignmentStatus, Prisma, ShipmentStatus } from "@prisma/client";
 import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
@@ -48,6 +48,7 @@ export type NavigationResponse = {
   destination: { kind: "PICKUP" | "DROPOFF"; lat: number; lng: number } | null;
   route: RouteResult | null;
   arrival: { eligible: boolean; distanceM: number | null; reason?: string };
+  routingError?: string | null;
 };
 
 const VALID_TRANSITIONS = new Set<string>([
@@ -207,6 +208,27 @@ export class ShipmentsService {
       const shipment = await tx.shipment.findUnique({ where: { id } });
       if (!shipment) throw new NotFoundException();
 
+      // Early idempotency: verify actor ownership and return immediately
+      if (shipment.status === toStatus) {
+        if (actor.role === "SENDER") {
+          if (shipment.senderId !== actor.sub) throw new ForbiddenException();
+        } else if (actor.role === "DRIVER") {
+          const assignment = await tx.driverAssignment.findFirst({
+            where: {
+              shipmentId: id,
+              driver: { userId: actor.sub },
+            },
+            include: { driver: true },
+          });
+          if (!assignment || assignment.driver?.userId !== actor.sub) {
+            throw new ForbiddenException();
+          }
+        } else if (actor.role !== "ADMIN") {
+          throw new ForbiddenException();
+        }
+        return { ...shipment, idempotent: true };
+      }
+
       const activeAssignment = await tx.driverAssignment.findFirst({
         where: {
           shipmentId: id,
@@ -259,9 +281,6 @@ export class ShipmentsService {
       } else {
         throw new ForbiddenException();
       }
-
-      // Idempotency: if already in the target status, return immediately
-      if (shipment.status === toStatus) return { ...shipment, idempotent: true };
 
       if (!canTransition(shipment.status, toStatus)) {
         throw new ConflictException("Invalid status transition");
@@ -421,13 +440,22 @@ export class ShipmentsService {
         throw new ForbiddenException();
       }
     } else if (actor.role === "DRIVER") {
+      const allowedStatuses: AssignmentStatus[] = [
+        AssignmentStatus.ACCEPTED,
+        ...(["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(shipment.status)
+          ? [AssignmentStatus.COMPLETED]
+          : []),
+      ];
       const assignment = await this.db.driverAssignment.findFirst({
         where: {
           shipmentId: id,
           driver: { userId: actor.sub },
+          status: { in: allowedStatuses },
         },
       });
-      if (!assignment) throw new ForbiddenException();
+      if (!assignment || !allowedStatuses.includes(assignment.status)) {
+        throw new ForbiddenException();
+      }
     } else if (actor.role !== "ADMIN" && actor.role !== "DISPATCHER") {
       throw new ForbiddenException();
     }
@@ -542,6 +570,7 @@ export class ShipmentsService {
 
     // Calculate route and arrival
     let route: RouteResult | null = null;
+    let routingError: string | null = null;
     let arrival: { eligible: boolean; distanceM: number | null; reason?: string } = {
       eligible: false,
       distanceM: null,
@@ -554,8 +583,9 @@ export class ShipmentsService {
             { lat: currentLocation.lat, lng: currentLocation.lng },
             { lat: destination.lat, lng: destination.lng },
           ]);
-        } catch {
+        } catch (err: any) {
           route = null;
+          routingError = err?.message || "Routing service unavailable";
         }
       }
 
@@ -581,6 +611,7 @@ export class ShipmentsService {
       destination,
       route,
       arrival,
+      routingError,
     };
   }
 
@@ -595,13 +626,22 @@ export class ShipmentsService {
         throw new ForbiddenException();
       }
     } else if (actor.role === "DRIVER") {
+      const allowedStatuses: AssignmentStatus[] = [
+        AssignmentStatus.ACCEPTED,
+        ...(["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(shipment.status)
+          ? [AssignmentStatus.COMPLETED]
+          : []),
+      ];
       const assignment = await this.db.driverAssignment.findFirst({
         where: {
           shipmentId: id,
           driver: { userId: actor.sub },
+          status: { in: allowedStatuses },
         },
       });
-      if (!assignment) throw new ForbiddenException();
+      if (!assignment || !allowedStatuses.includes(assignment.status)) {
+        throw new ForbiddenException();
+      }
     } else if (actor.role !== "ADMIN" && actor.role !== "DISPATCHER") {
       throw new ForbiddenException();
     }

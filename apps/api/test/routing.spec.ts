@@ -283,4 +283,15 @@ describe("RoutingService contract", () => {
 
     expect(service.getCacheSize()).toBeLessThanOrEqual(500);
   });
+
+  it("fails fast with ServiceUnavailableException when OSRM_BASE_URL is not configured", async () => {
+    delete process.env.OSRM_BASE_URL;
+    const points = [
+      { lat: 10.754, lng: 106.663 },
+      { lat: 10.772, lng: 106.698 },
+    ];
+    await expect(service.getRoute(points)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+  });
 });

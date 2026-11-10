@@ -4,7 +4,7 @@
  */
 
 import { MapEngine } from "./map-engine.js";
-import { GeocodingClient, AbortableRequest } from "./api-clients.js";
+import { AbortableRequest, GeocodingClient } from "./api-clients.js";
 import { getCurrentPositionOnce } from "./geolocation.js";
 
 export class SenderMapController {
@@ -14,6 +14,7 @@ export class SenderMapController {
     api,
     onQuoteChanged = null,
     geocoding = null,
+    tokenGetter = () => null,
     geolocation = null,
     MapEngineClass = MapEngine,
   }) {
@@ -25,17 +26,10 @@ export class SenderMapController {
 
     this.geocoding =
       geocoding ||
-      new GeocodingClient("/api/v1", () => {
-        try {
-          return typeof localStorage !== "undefined"
-            ? localStorage.getItem("moveflow_token")
-            : null;
-        } catch {
-          return null;
-        }
-      });
+      new GeocodingClient("/api/v1", tokenGetter);
 
     this.geolocation = geolocation || { getCurrentPositionOnce };
+    this.quoteGeneration = 0;
     this.quoteReq = new AbortableRequest();
     this.engine = null;
     this._inputHandler = null;
@@ -96,6 +90,8 @@ export class SenderMapController {
     if (!match) return;
 
     const prefix = match[1];
+    this.quoteGeneration += 1;
+    this.quoteReq.abort();
     // Invalidate coordinates only when the corresponding address fields change
     this.setInput(`${prefix}Lat`, "");
     this.setInput(`${prefix}Lng`, "");
@@ -188,6 +184,8 @@ export class SenderMapController {
   }
 
   async recalculateRouteAndQuote() {
+    this.quoteReq.abort();
+    const quoteGeneration = ++this.quoteGeneration;
     const pLat = this.getNumericInput("pickupLat");
     const pLng = this.getNumericInput("pickupLng");
     const dLat = this.getNumericInput("dropoffLat");
@@ -202,6 +200,7 @@ export class SenderMapController {
     try {
       const payload = this.getBookingPayload();
       const quote = await this.api.post("/pricing/quote", payload);
+      if (quoteGeneration !== this.quoteGeneration) return;
 
       if (this.engine && quote.geometry) {
         this.engine.setRoute(quote.geometry);
@@ -274,7 +273,7 @@ export class SenderMapController {
   }
 
   destroy() {
-    this.quoteReq.abort();
+    this.quoteGeneration += 1;
     if (this.geocoding?.abort) {
       this.geocoding.abort();
     }

@@ -29,6 +29,9 @@ describe("HTTP contract with real JWT guard and validation", () => {
     listRules: jest.fn(),
     revise: jest.fn(),
   };
+  const dispatch = {
+    location: jest.fn().mockResolvedValue({ accepted: true }),
+  };
   const geocoding = {
     search: jest.fn().mockResolvedValue([]),
     reverse: jest.fn().mockResolvedValue({
@@ -87,7 +90,7 @@ describe("HTTP contract with real JWT guard and validation", () => {
       .overrideProvider(ShipmentsService)
       .useValue(shipments)
       .overrideProvider(DispatchService)
-      .useValue({})
+      .useValue(dispatch)
       .overrideProvider(WebhooksService)
       .useValue({})
       .overrideProvider(GeocodingService)
@@ -119,6 +122,18 @@ describe("HTTP contract with real JWT guard and validation", () => {
       .set("Authorization", "Bearer forged")
       .send(booking)
       .expect(401));
+  it("rejects driver location without accuracy metadata", () =>
+    request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", `Bearer ${token("DRIVER")}`)
+      .send({ lat: 10.754, lng: 106.663, capturedAt: "2026-11-10T02:00:00.000Z" })
+      .expect(400));
+  it("rejects driver location without capture timestamp", () =>
+    request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", `Bearer ${token("DRIVER")}`)
+      .send({ lat: 10.754, lng: 106.663, accuracyM: 12 })
+      .expect(400));
   it("permits Sender quote", () =>
     request(app.getHttpServer())
       .post("/api/v1/pricing/quote")

@@ -252,9 +252,9 @@ describe("Driver dispatch", () => {
       ).rejects.toThrow("Accuracy must be positive and at most 200m");
     });
 
-    it("rejects stale points (> 300s)", async () => {
+    it("rejects stale points (> 120s)", async () => {
       db.$queryRaw.mockResolvedValue([]);
-      const staleTime = new Date(Date.now() - 350000).toISOString();
+      const staleTime = new Date(Date.now() - 121000).toISOString();
       await expect(
         service.location(actor, {
           lat: 10.754,

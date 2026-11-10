@@ -84,6 +84,30 @@ function createMockForm() {
   return form;
 }
 
+test("SenderMapController - default geocoding client uses the in-memory access token", async () => {
+  const originalFetch = globalThis.fetch;
+  let authorization;
+  globalThis.fetch = async (_url, options) => {
+    authorization = options.headers.Authorization;
+    return { ok: true, json: async () => [] };
+  };
+
+  try {
+    const controller = new SenderMapController({
+      mapElement: {},
+      form: createMockForm(),
+      api: { post: async () => ({}) },
+      tokenGetter: () => "access-token",
+    });
+
+    await controller.geocoding.search("Nguyen Trai", 5);
+    assert.equal(authorization, "Bearer access-token");
+    controller.destroy();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("SenderMapController - getBookingPayload extracts valid booking data", () => {
   const form = createMockForm();
   const controller = new SenderMapController({
@@ -203,6 +227,36 @@ test("SenderMapController - updates address and route after marker drag", async 
   assert.ok(latestRoute);
   assert.equal(quoteReceived.fee, 35000);
   assert.equal(quoteReceived.distanceKm, 4.8);
+});
+
+test("SenderMapController - ignores an older quote that resolves after a newer quote", async () => {
+  const form = createMockForm();
+  const pending = [];
+  const routes = [];
+  const quotes = [];
+  const controller = new SenderMapController({
+    mapElement: {},
+    form,
+    api: {
+      post: () => new Promise((resolve) => pending.push(resolve)),
+    },
+    onQuoteChanged: (quote) => quotes.push(quote),
+  });
+  controller.engine = {
+    setRoute: (route) => routes.push(route),
+    fitRelevantPoints() {},
+  };
+
+  const older = controller.recalculateRouteAndQuote();
+  const newer = controller.recalculateRouteAndQuote();
+  pending[1]({ fee: 42000, geometry: { type: "LineString", coordinates: [[2, 2]] } });
+  await newer;
+  pending[0]({ fee: 31000, geometry: { type: "LineString", coordinates: [[1, 1]] } });
+  await older;
+
+  assert.equal(quotes.length, 1);
+  assert.equal(quotes[0].fee, 42000);
+  assert.deepEqual(routes, [{ type: "LineString", coordinates: [[2, 2]] }]);
 });
 
 test("SenderMapController - GPS auto-fills pickup A and handles denial gracefully", async () => {

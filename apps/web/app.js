@@ -187,11 +187,16 @@
   let activeDriverTripController = null;
   let activeDetailMapEngine = null;
   let liveTrackingTimer = null;
+  let liveTrackingVisibilityHandler = null;
 
   function stopLiveTracking() {
     if (liveTrackingTimer) {
       clearInterval(liveTrackingTimer);
       liveTrackingTimer = null;
+    }
+    if (liveTrackingVisibilityHandler && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", liveTrackingVisibilityHandler);
+      liveTrackingVisibilityHandler = null;
     }
     if (activeDetailMapEngine) {
       activeDetailMapEngine.destroy();
@@ -259,6 +264,7 @@
         mapElement: mapEl,
         form,
         api: { post },
+        tokenGetter: () => state.token,
         onQuoteChanged: (quote) => {
           state.quote = quote;
           const box = target.querySelector("#quote-result");

@@ -70,9 +70,10 @@ export class RoutingService {
       }
     }
 
-    const baseUrl = (process.env.OSRM_BASE_URL ?? "https://router.project-osrm.org")
-      .trim()
-      .replace(/\/+$/, "");
+    const baseUrl = (process.env.OSRM_BASE_URL ?? "").trim().replace(/\/+$/, "");
+    if (!baseUrl) {
+      throw new ServiceUnavailableException("Routing service is not configured (OSRM_BASE_URL missing)");
+    }
     const profile = "driving";
 
     let endpoint: URL;

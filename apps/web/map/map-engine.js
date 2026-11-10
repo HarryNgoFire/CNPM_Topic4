@@ -2,24 +2,45 @@
  * Reusable MapLibre GL JS Engine for MoveFlow.
  */
 
+export const DEFAULT_STYLE_URL = "/maps/styles/moveflow/style.json";
+
 export const DEFAULT_STYLE = {
   version: 8,
+  name: "MoveFlow Vector Self-Host",
   sources: {
-    "osm-tiles": {
-      type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
+    openmaptiles: {
+      type: "vector",
+      tiles: ["/maps/data/v3/{z}/{x}/{y}.pbf"],
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, © <a href="https://openmaptiles.org/">OpenMapTiles</a>',
     },
   },
   layers: [
     {
-      id: "osm-tiles-layer",
-      type: "raster",
-      source: "osm-tiles",
-      minzoom: 0,
-      maxzoom: 19,
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#f8f9fa" },
+    },
+    {
+      id: "water",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "water",
+      paint: { "fill-color": "#c4e3f3" },
+    },
+    {
+      id: "building",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "building",
+      paint: { "fill-color": "#e0dfdb", "fill-outline-color": "#d0cfcb" },
+    },
+    {
+      id: "transportation",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "transportation",
+      paint: { "line-color": "#ffffff", "line-width": 2 },
     },
   ],
 };
@@ -104,7 +125,7 @@ export class MapEngine {
     this.markerB = null;
     this.markerDriver = null;
 
-    const style = styleUrl || DEFAULT_STYLE;
+    const style = styleUrl || (typeof window !== "undefined" && window.__MOVEFLOW_MAP_STYLE__) || DEFAULT_STYLE_URL;
 
     this.map = new maplibregl.Map({
       container: this.container,
@@ -362,7 +383,7 @@ export class MapEngine {
     }
   }
 
-  fitRelevantPoints({ padding = 50 } = {}) {
+  fitRelevantPoints({ padding = 50, animate = true, duration = 800 } = {}) {
     const maplibregl = window.maplibregl;
     if (!maplibregl) return;
 
@@ -397,7 +418,7 @@ export class MapEngine {
       this.map.fitBounds(bounds, {
         padding,
         maxZoom: 16,
-        duration: 800,
+        duration: animate ? duration : 0,
       });
     }
   }

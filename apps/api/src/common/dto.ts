@@ -28,18 +28,16 @@ export class PointDto {
   @ApiProperty({ example: 106.663 }) @IsNumber() @IsLongitude() lng!: number;
 }
 export class DriverLocationDto extends PointDto {
-  @ApiPropertyOptional({ example: 10.5, description: "Accuracy in meters (max 200)" })
-  @IsOptional()
+  @ApiProperty({ example: 10.5, description: "Accuracy in meters (max 200)" })
   @IsNumber()
   @Min(0.01)
   @Max(200)
-  accuracyM?: number;
+  accuracyM!: number;
 
-  @ApiPropertyOptional({ example: "2026-11-10T02:00:00.000Z", description: "ISO 8601 capture timestamp" })
-  @IsOptional()
+  @ApiProperty({ example: "2026-11-10T02:00:00.000Z", description: "ISO 8601 capture timestamp" })
   @IsString()
   @IsISO8601()
-  capturedAt?: string;
+  capturedAt!: string;
 }
 export class AddressDto extends PointDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(255) line!: string;

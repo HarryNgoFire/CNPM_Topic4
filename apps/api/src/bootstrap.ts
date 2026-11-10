@@ -8,7 +8,14 @@ export function configure(app: INestApplication) {
   try {
     const expressApp = app.getHttpAdapter().getInstance();
     if (expressApp && typeof expressApp.set === "function") {
-      expressApp.set("trust proxy", 1);
+      const trustProxyEnv = process.env.TRUST_PROXY;
+      if (trustProxyEnv === "true" || trustProxyEnv === "1") {
+        expressApp.set("trust proxy", 1);
+      } else if (trustProxyEnv) {
+        expressApp.set("trust proxy", trustProxyEnv);
+      } else {
+        expressApp.set("trust proxy", "loopback");
+      }
     }
   } catch {
     // Adapter may differ in non-express test harnesses

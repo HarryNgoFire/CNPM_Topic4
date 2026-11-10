@@ -321,6 +321,7 @@ export function addResponseContracts(doc: OpenAPIObject) {
       },
       ["eligible", "distanceM"],
     ),
+    routingError: { oneOf: [{ type: "string" }, { type: "null" }] },
   });
   schemas.LiveTrackingResponse = object({
     shipmentId: uuid,
