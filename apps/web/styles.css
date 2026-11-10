@@ -1114,8 +1114,8 @@ a {
   border: none;
   transition: all 0.15s ease;
   user-select: none;
-  white-space: nowrap;
   min-width: 0;
+  text-align: center;
 }
 
 .btn:focus-visible,
@@ -3307,8 +3307,8 @@ body.theme-dark .demo-action-btn.active-account {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 280px;
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 @media (max-width: 640px) {
