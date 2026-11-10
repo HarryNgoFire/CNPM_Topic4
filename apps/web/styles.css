@@ -27,3 +27,63 @@
   padding: 0 !important;
   margin: 0 !important;
 }
+
+/* Nút con mắt ẩn/hiện mật khẩu trong form auth */
+.auth-card .password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.auth-card .password-input-wrapper input {
+  width: 100%;
+  padding-right: 44px !important;
+}
+
+.auth-card .toggle-password-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #73809a;
+  transition: color 0.15s ease;
+}
+
+.auth-card .toggle-password-btn:hover {
+  color: #18243b;
+}
+
+/* Nút Đăng xuất an toàn và nổi bật trong Sidebar */
+.sidebar [data-action="logout"] {
+  margin-top: 8px;
+  border-radius: 11px;
+  color: #ff9da7 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease-in-out;
+}
+
+.sidebar [data-action="logout"] .nav-icon {
+  color: #ff8591;
+  transition: transform 0.2s ease;
+}
+
+/* Hiệu ứng khi rê chuột vào nút Đăng xuất */
+.sidebar [data-action="logout"]:hover {
+  background: rgba(184, 61, 73, 0.18) !important;
+  color: #ffffff !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  box-shadow: 0 4px 14px rgba(184, 61, 73, 0.25);
+  transform: translateY(-1px);
+}
+
+.sidebar [data-action="logout"]:hover .nav-icon {
+  color: #ffffff;
+  transform: translateX(3px); /* Nhẹ nhàng đẩy icon mũi tên ra ngoài báo hiệu chuẩn bị thoát */
+}
