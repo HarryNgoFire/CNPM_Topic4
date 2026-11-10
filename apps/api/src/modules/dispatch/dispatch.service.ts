@@ -203,10 +203,7 @@ export class DispatchService {
       },
       orderBy: { assignedAt: "asc" },
     });
-    return tasks.map((task) => ({
-      ...task,
-      navigationUrls: null,
-    }));
+    return tasks;
   }
   async location(
     actor: Actor,

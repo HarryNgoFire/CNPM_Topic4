@@ -10,7 +10,7 @@
 - Tạo đơn giao nhận với điểm lấy, điểm giao, tọa độ, khối lượng và dịch vụ tiêu chuẩn/hỏa tốc.
 - Yêu cầu báo phí trước khi tạo đơn; backend sử dụng khoảng cách từ OSRM.
 - Xem danh sách đơn, chi tiết đơn, trạng thái và lịch sử; tra cứu bằng mã vận đơn.
-- Mở Google Maps đến điểm lấy/điểm giao bằng URL, không cần Google Maps API key.
+- Xem hành trình và vị trí tài xế theo thời gian thực trực tiếp trên bản đồ MapLibre.
 
 ### Quản lý / điều phối
 - Xem tổng quan đơn hàng, đơn cần phân công và trạng thái.
@@ -22,7 +22,7 @@
 ### Tài xế
 - Xem công việc được phân công, nhận/từ chối đơn.
 - Cập nhật trạng thái sẵn sàng/ngoại tuyến.
-- Mở Google Maps để đi đến điểm lấy và điểm giao.
+- Điều hướng và theo dõi lộ trình chặng trực tiếp trên bản đồ MapLibre.
 - Cập nhật trạng thái đơn từ đã tiếp nhận → đang vận chuyển → đang giao → đã giao.
 
 ## 2. Yêu cầu
@@ -112,7 +112,7 @@ Quãng đường tính phí được lấy từ OSRM dựa trên hai tọa độ
 ### Tài xế
 1. Đăng nhập tài khoản `DRIVER` đã được cấp và xác minh.
 2. Mở **Công việc của tôi**.
-3. Nhận/từ chối đơn; dùng **Đi đến điểm lấy hàng/điểm giao hàng** để mở Google Maps.
+3. Nhận/từ chối đơn; xem lộ trình và điều hướng trực tiếp trên bản đồ tích hợp trong ứng dụng.
 4. Cập nhật trạng thái theo tiến trình thực tế.
 
 ## 6. Bảo mật và giới hạn MVP

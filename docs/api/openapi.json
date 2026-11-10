@@ -4746,6 +4746,16 @@
           },
           "city": {
             "type": "string"
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
           }
         },
         "required": [
@@ -4854,23 +4864,6 @@
           "occurredAt"
         ]
       },
-      "NavigationUrls": {
-        "type": "object",
-        "properties": {
-          "pickup": {
-            "type": "string",
-            "format": "uri"
-          },
-          "dropoff": {
-            "type": "string",
-            "format": "uri"
-          }
-        },
-        "required": [
-          "pickup",
-          "dropoff"
-        ]
-      },
       "ShipmentDetailResponse": {
         "allOf": [
           {
@@ -4893,24 +4886,13 @@
                 "items": {
                   "$ref": "#/components/schemas/HistoryResponse"
                 }
-              },
-              "navigationUrls": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/NavigationUrls"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
               }
             },
             "required": [
               "parcel",
               "pickup",
               "dropoff",
-              "history",
-              "navigationUrls"
+              "history"
             ]
           }
         ]
@@ -4948,21 +4930,10 @@
                     ]
                   }
                 ]
-              },
-              "navigationUrls": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/NavigationUrls"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
               }
             },
             "required": [
-              "shipment",
-              "navigationUrls"
+              "shipment"
             ]
           }
         ]

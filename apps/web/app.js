@@ -150,7 +150,7 @@
     try {
       if (state.view === "dashboard") await renderDashboard(target);
       else if (state.view === "shipments") await renderShipments(target);
-      else if (state.view === "new") renderNewShipment(target);
+      else if (state.view === "new") await renderNewShipment(target);
       else if (state.view === "tracking") renderTracking(target);
       else if (state.view === "tasks") await renderTasks(target);
       else if (state.view === "users") await renderUsers(target);
@@ -167,19 +167,19 @@
   async function renderDashboard(target) {
     const shipments = await safeGet("/shipments?page=1&limit=100"); state.lastShipments = Array.isArray(shipments) ? shipments : [];
     if (state.user.role === "SENDER") {
-      const items = state.lastShipments; const active = items.filter(x => x.status !== "DELIVERED").length; const delivered = items.filter(x => x.status === "DELIVERED").length; const fee = items.reduce((sum, x) => sum + Number(x.fee || 0), 0);
+      const items = state.lastShipments; const active = items.filter(x => !["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(x.status)).length; const delivered = items.filter(x => x.status === "DELIVERED").length; const fee = items.reduce((sum, x) => sum + Number(x.fee || 0), 0);
       target.innerHTML = `${welcome(`Xin chào, ${esc(state.user.name.split(/\s+/).slice(-1)[0])} 👋`, "Đây là tổng quan hành trình giao nhận của bạn.", '<button class="btn btn-primary" data-view="new">＋ Tạo đơn mới</button>')}<div class="grid stats-grid">${stat("Tổng đơn hàng", items.length, "Tất cả đơn đã tạo", "▤")}${stat("Đang xử lý", active, "Đơn chưa giao hoàn tất", "⇢", "background:#fff4da;color:#9d6913")}${stat("Đã giao thành công", delivered, "Hoàn tất hành trình", "✓", "background:#e7f8f0;color:#177c59")}${stat("Tổng phí đơn hàng", fmtMoney(fee), "Tổng phí đã ghi nhận", "₫")}</div><div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Đơn hàng gần đây</h3><p>Theo dõi tiến trình xử lý các đơn mới nhất</p></div><button class="link-button" data-view="shipments">Xem tất cả →</button></div>${shipmentTable(items.slice(0, 5))}</section><section class="panel"><div class="panel-head"><div><h3>Lối tắt</h3><p>Thao tác thường dùng</p></div></div><div class="quick-actions"><button class="quick-action" data-view="new"><span class="qa-icon">＋</span><b>Tạo đơn giao hàng</b><small>Nhập điểm lấy, điểm giao và kiện hàng</small></button><button class="quick-action" data-view="tracking"><span class="qa-icon">⌖</span><b>Tra cứu đơn hàng</b><small>Xem tiến độ bằng mã vận đơn</small></button><button class="quick-action" data-view="profile"><span class="qa-icon">◉</span><b>Tài khoản</b><small>Chỉnh hồ sơ và đổi mật khẩu</small></button><button class="quick-action" data-action="support"><span class="qa-icon">?</span><b>Hướng dẫn</b><small>Xem cách dùng những chức năng cơ bản</small></button></div></section></div>`;
     } else {
       const isAdmin = state.user.role === "ADMIN"; const queue = await safeGet("/dispatch/queue", []); state.lastQueue = Array.isArray(queue) ? queue : [];
       let users = []; if (isAdmin) { users = await safeGet("/admin/users", []); state.lastUsers = Array.isArray(users) ? users : []; }
-      const delivered = state.lastShipments.filter(x => x.status === "DELIVERED").length; const active = state.lastShipments.filter(x => x.status !== "DELIVERED").length;
+      const delivered = state.lastShipments.filter(x => x.status === "DELIVERED").length; const active = state.lastShipments.filter(x => !["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(x.status)).length;
       target.innerHTML = `${welcome("Trung tâm vận hành", "Theo dõi đơn hàng, tình trạng điều phối và sức khỏe tài khoản.", '<button class="btn btn-primary" data-view="shipments">▤ Xem đơn hàng</button>')}<div class="grid stats-grid">${stat("Tổng đơn hàng", state.lastShipments.length, "Trong danh sách mới nhất", "▤")}${stat("Cần điều phối", state.lastQueue.length, "Chưa có tài xế nhận", "⇢", "background:#fff4da;color:#9d6913")}${stat("Đã giao thành công", delivered, "Hoàn tất hành trình", "✓", "background:#e7f8f0;color:#177c59")}${stat(isAdmin ? "Tài khoản" : "Đơn đang mở", isAdmin ? users.length : active, isAdmin ? "Khách hàng, tài xế và nhân sự" : "Chưa giao hoàn tất", isAdmin ? "♙" : "◷")}</div><div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Đơn hàng mới nhất</h3><p>Danh sách cần theo dõi</p></div><button class="link-button" data-view="shipments">Mở danh sách →</button></div>${shipmentTable(state.lastShipments.slice(0, 6))}</section><section class="panel"><div class="panel-head"><div><h3>Hàng chờ điều phối</h3><p>Các đơn chưa có tài xế nhận</p></div><button class="link-button" data-view="users">Vận hành →</button></div>${state.lastQueue.slice(0, 5).map(q => `<div class="kpi-row"><span><b>${esc(q.trackingCode || q.id?.slice(0, 8))}</b><br><small>${fmtDate(q.createdAt)}</small></span><button class="btn btn-light btn-sm" data-action="assign" data-id="${esc(q.id)}">Phân công</button></div>`).join("") || '<div class="empty">Không có đơn đang chờ điều phối.</div>'}</section></div>`;
     }
     bindViewButtons(target);
   }
   async function renderShipments(target) {
     const result = await safeGet("/shipments?page=1&limit=100", []); const items = Array.isArray(result) ? result : []; state.lastShipments = items;
-    target.innerHTML = `${welcome("Đơn hàng", state.user.role === "SENDER" ? "Quản lý và theo dõi các yêu cầu giao nhận của bạn." : "Giám sát trạng thái đơn hàng trên toàn hệ thống.", state.user.role === "SENDER" ? '<button class="btn btn-primary" data-view="new">＋ Tạo đơn mới</button>' : '')}<section class="panel"><div class="filters"><input id="shipment-search" placeholder="Tìm mã đơn…"><select id="shipment-filter"><option value="">Tất cả trạng thái</option><option value="RECEIVED">Đã tiếp nhận</option><option value="IN_TRANSIT">Đang vận chuyển</option><option value="OUT_FOR_DELIVERY">Đang giao hàng</option><option value="DELIVERED">Đã giao</option></select><button class="btn btn-outline btn-sm" data-action="reload-shipments">↻ Làm mới</button></div><div id="shipment-table">${shipmentTable(items)}</div><p class="small-muted">Danh sách đang hiển thị tối đa 100 đơn gần nhất.</p></section>`;
+    target.innerHTML = `${welcome("Đơn hàng", state.user.role === "SENDER" ? "Quản lý và theo dõi các yêu cầu giao nhận của bạn." : "Giám sát trạng thái đơn hàng trên toàn hệ thống.", state.user.role === "SENDER" ? '<button class="btn btn-primary" data-view="new">＋ Tạo đơn mới</button>' : '')}<section class="panel"><div class="filters"><input id="shipment-search" placeholder="Tìm mã đơn…"><select id="shipment-filter"><option value="">Tất cả trạng thái</option><option value="RECEIVED">Đã tiếp nhận</option><option value="EN_ROUTE_PICKUP">Đang lấy hàng</option><option value="ARRIVED_PICKUP">Đã đến điểm lấy</option><option value="IN_TRANSIT">Đang vận chuyển</option><option value="OUT_FOR_DELIVERY">Đang giao hàng</option><option value="ARRIVED_DROPOFF">Đã đến điểm giao</option><option value="DELIVERED">Đã giao</option><option value="DELIVERY_FAILED">Giao thất bại</option><option value="CANCELLED">Đã hủy</option></select><button class="btn btn-outline btn-sm" data-action="reload-shipments">↻ Làm mới</button></div><div id="shipment-table">${shipmentTable(items)}</div><p class="small-muted">Danh sách đang hiển thị tối đa 100 đơn gần nhất.</p></section>`;
     const filter = () => { const search = (target.querySelector("#shipment-search")?.value || "").toLowerCase(); const status = target.querySelector("#shipment-filter")?.value || ""; const filtered = items.filter(x => String(x.trackingCode || x.id).toLowerCase().includes(search) && (!status || x.status === status)); target.querySelector("#shipment-table").innerHTML = shipmentTable(filtered); bindViewButtons(target); };
     target.querySelector("#shipment-search")?.addEventListener("input", filter); target.querySelector("#shipment-filter")?.addEventListener("change", filter); bindViewButtons(target);
   }
@@ -378,7 +378,8 @@
       const button = event.currentTarget;
       button.disabled = true;
       try {
-        const body = activeSenderMapController ? activeSenderMapController.getBookingPayload() : bookingPayload(new FormData(form));
+        if (!activeSenderMapController) throw new Error("Bản đồ chưa sẵn sàng, vui lòng thử lại.");
+        const body = activeSenderMapController.getBookingPayload();
         const quote = await post("/pricing/quote", body);
         state.quote = quote;
         if (activeSenderMapController && quote.geometry) {
@@ -399,7 +400,8 @@
       const submit = form.querySelector('button[type="submit"]');
       submit.disabled = true;
       try {
-        const body = activeSenderMapController ? activeSenderMapController.getBookingPayload() : bookingPayload(new FormData(form));
+        if (!activeSenderMapController) throw new Error("Bản đồ chưa sẵn sàng, vui lòng thử lại.");
+        const body = activeSenderMapController.getBookingPayload();
         const result = await post("/shipments", body);
         showToast("Đơn hàng đã được tạo.", "success");
         state.detail = result.id;
@@ -413,7 +415,7 @@
     });
     bindViewButtons(target);
   }
-  function bookingPayload(formData) { for (const prefix of ["pickup", "dropoff"]) { if (!formData.get(`${prefix}Lat`) || !formData.get(`${prefix}Lng`)) throw new Error(`Chưa chọn vị trí trên bản đồ cho ${prefix === "pickup" ? "điểm lấy" : "điểm giao"}.`); } const n = key => Number(formData.get(key)); const text = key => String(formData.get(key) || "").trim(); return { pickupAddress: { line: text("pickupLine"), ward: text("pickupWard"), district: text("pickupDistrict"), city: text("pickupCity") || "Thành phố Hồ Chí Minh", lat: n("pickupLat"), lng: n("pickupLng") }, dropoffAddress: { line: text("dropoffLine"), ward: text("dropoffWard"), district: text("dropoffDistrict"), city: text("dropoffCity") || "Thành phố Hồ Chí Minh", lat: n("dropoffLat"), lng: n("dropoffLng") }, parcel: { weightKg: n("weightKg"), lengthCm: n("lengthCm"), widthCm: n("widthCm"), heightCm: n("heightCm") }, serviceType: text("serviceType") }; }
+
   function renderTracking(target) { target.innerHTML = `${welcome("Tra cứu đơn hàng", "Nhập mã vận đơn để xem trạng thái gần nhất và lịch sử xử lý.")}<section class="panel" style="max-width:800px"><form id="tracking-form"><div class="field"><label>Mã vận đơn</label><input name="trackingCode" placeholder="Ví dụ: A1B2C3D4E5F6A7B8" maxlength="16" minlength="12" style="text-transform:uppercase" required></div><button class="btn btn-primary" type="submit">Tra cứu trạng thái →</button></form><div id="tracking-result"></div></section>`; target.querySelector("#tracking-form").addEventListener("submit", async event => { event.preventDefault(); const code = String(new FormData(event.currentTarget).get("trackingCode")).trim().toUpperCase(); const box = target.querySelector("#tracking-result"); box.innerHTML = '<div class="page-loading">Đang tra cứu…</div>'; try { const result = await api(`/tracking/${encodeURIComponent(code)}`); const history = (result.history || []).map(item => `<div class="tracking-step"><b>${badge(item.toStatus)}</b><span>${fmtDate(item.occurredAt)}</span></div>`).join(""); box.innerHTML = `<div class="section-gap"><div class="panel-head"><div><h3>Đơn ${esc(result.trackingCode)}</h3><p>Tạo lúc ${fmtDate(result.createdAt)}</p></div>${badge(result.status)}</div><div class="tracking-result"><div class="tracking-step"><b>Điểm lấy</b><span>${esc(result.pickup?.city || "Địa chỉ lấy hàng đã lưu")}</span></div><div class="tracking-step"><b>Điểm giao</b><span>${esc(result.dropoff?.city || "Địa chỉ giao hàng đã lưu")}</span></div></div><div class="section-gap"><h3>Lịch sử trạng thái</h3><div class="tracking-result">${history || "Chưa có lịch sử bổ sung."}</div></div></div>`; } catch (error) { box.innerHTML = `<div class="notice error">${esc(error.message)}</div>`; } }); }
   async function renderTasks(target) {
     if (activeDriverTripController) {
@@ -622,7 +624,9 @@
     const hasCoords = shipment.pickup?.lat != null && shipment.dropoff?.lat != null;
     const isTerminal = ["DELIVERED", "DELIVERY_FAILED", "CANCELLED"].includes(shipment.status);
 
-    target.innerHTML = `${welcome("Chi tiết đơn hàng", `Mã vận đơn ${esc(shipment.trackingCode)} · Tạo lúc ${fmtDate(shipment.createdAt)}`, '<button class="btn btn-outline" data-view="shipments">← Quay lại đơn hàng</button>')}<div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Thông tin vận chuyển</h3><p>Trạng thái và chi phí được lưu trên hệ thống</p></div>${badge(shipment.status)}</div><div class="kpi-row"><span>Mã vận đơn</span><b>${esc(shipment.trackingCode)}</b></div><div class="kpi-row"><span>Loại dịch vụ</span><b>${esc(shipment.serviceType)}</b></div><div class="kpi-row"><span>Phí đã chốt</span><b>${fmtMoney(shipment.fee)}</b></div><div class="kpi-row"><span>Khối lượng</span><b>${esc(shipment.parcel?.weightKg ?? "—")} kg</b></div>${state.user.role === "DRIVER" ? `<div class="section-gap"><button class="btn btn-primary btn-sm" data-view="tasks">↗ Mở bản đồ dẫn đường (Công việc tài xế)</button></div>` : ""}</section><section class="panel"><div class="panel-head"><div><h3>Địa chỉ</h3><p>Thông tin do người tạo đơn cung cấp</p></div></div><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line)}, ${esc(shipment.pickup?.ward)}, ${esc(shipment.pickup?.district)}, ${esc(shipment.pickup?.city)}</span></div><div class="tracking-step section-gap"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line)}, ${esc(shipment.dropoff?.ward)}, ${esc(shipment.dropoff?.district)}, ${esc(shipment.dropoff?.city)}</span></div><div class="section-gap"><h3>Lịch sử</h3>${(shipment.history || []).map(item => `<div class="kpi-row"><span>${badge(item.toStatus)}</span><b>${fmtDate(item.occurredAt)}</b></div>`).join("") || '<p class="small-muted">Chưa có cập nhật.</p>'}</div></section></div>${hasCoords ? `<section class="panel section-gap"><div class="panel-head"><div><h3>Bản đồ hành trình & vị trí tài xế trực tiếp</h3><p id="live-driver-status" class="small-muted">${isTerminal ? "Đơn hàng đã hoàn tất hành trình." : "Đang kết nối vị trí trực tiếp..."}</p></div></div><div id="shipment-detail-map" class="moveflow-map-container" style="height:380px;border-radius:8px"></div></section>` : ""}`;
+    const canCancel = (state.user.role === "SENDER" && shipment.status === "RECEIVED") || (state.user.role === "ADMIN" && ["RECEIVED", "EN_ROUTE_PICKUP", "ARRIVED_PICKUP"].includes(shipment.status));
+
+    target.innerHTML = `${welcome("Chi tiết đơn hàng", `Mã vận đơn ${esc(shipment.trackingCode)} · Tạo lúc ${fmtDate(shipment.createdAt)}`, '<button class="btn btn-outline" data-view="shipments">← Quay lại đơn hàng</button>')}<div class="grid dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>Thông tin vận chuyển</h3><p>Trạng thái và chi phí được lưu trên hệ thống</p></div>${badge(shipment.status)}</div><div class="kpi-row"><span>Mã vận đơn</span><b>${esc(shipment.trackingCode)}</b></div><div class="kpi-row"><span>Loại dịch vụ</span><b>${esc(shipment.serviceType)}</b></div><div class="kpi-row"><span>Phí đã chốt</span><b>${fmtMoney(shipment.fee)}</b></div><div class="kpi-row"><span>Khối lượng</span><b>${esc(shipment.parcel?.weightKg ?? "—")} kg</b></div>${shipment.reason ? `<div class="kpi-row"><span>Lý do hủy / thất bại</span><b style="color:var(--red)">${esc(shipment.reason)}</b></div>` : ""}<div class="action-group section-gap">${state.user.role === "DRIVER" ? `<button class="btn btn-primary btn-sm" data-view="tasks">↗ Mở bản đồ dẫn đường (Công việc tài xế)</button>` : ""}${canCancel ? `<button class="btn btn-danger btn-sm" data-action="cancel-shipment" data-id="${esc(shipment.id)}">✕ Hủy đơn hàng</button>` : ""}</div></section><section class="panel"><div class="panel-head"><div><h3>Địa chỉ</h3><p>Thông tin do người tạo đơn cung cấp</p></div></div><div class="tracking-step"><b>Điểm lấy hàng</b><span>${esc(shipment.pickup?.line)}, ${esc(shipment.pickup?.ward)}, ${esc(shipment.pickup?.district)}, ${esc(shipment.pickup?.city)}</span></div><div class="tracking-step section-gap"><b>Điểm giao hàng</b><span>${esc(shipment.dropoff?.line)}, ${esc(shipment.dropoff?.ward)}, ${esc(shipment.dropoff?.district)}, ${esc(shipment.dropoff?.city)}</span></div><div class="section-gap"><h3>Lịch sử</h3>${(shipment.history || []).map(item => `<div class="kpi-row"><span>${badge(item.toStatus)}${item.reason ? `<br><small class="small-muted">${esc(item.reason)}</small>` : ""}</span><b>${fmtDate(item.occurredAt)}</b></div>`).join("") || '<p class="small-muted">Chưa có cập nhật.</p>'}</div></section></div>${hasCoords ? `<section class="panel section-gap"><div class="panel-head"><div><h3>Bản đồ hành trình & vị trí tài xế trực tiếp</h3><p id="live-driver-status" class="small-muted">${isTerminal ? "Đơn hàng đã hoàn tất hành trình." : "Đang kết nối vị trí trực tiếp..."}</p></div></div><div id="shipment-detail-map" class="moveflow-map-container" style="height:380px;border-radius:8px"></div></section>` : ""}`;
     bindViewButtons(target);
 
     if (hasCoords) {
@@ -636,6 +640,9 @@
             pickup: { lat: shipment.pickup.lat, lng: shipment.pickup.lng },
             dropoff: { lat: shipment.dropoff.lat, lng: shipment.dropoff.lng },
           });
+          if (shipment.feeBreakdown?.geometry) {
+            activeDetailMapEngine.setRoute(shipment.feeBreakdown.geometry);
+          }
           activeDetailMapEngine.fitRelevantPoints();
 
           const statusNote = target.querySelector("#live-driver-status");
@@ -664,6 +671,12 @@
 
           if (!isTerminal) {
             liveTrackingTimer = setInterval(pollLive, 10000);
+            liveTrackingVisibilityHandler = () => {
+              if (document.visibilityState === "visible") {
+                pollLive();
+              }
+            };
+            document.addEventListener("visibilitychange", liveTrackingVisibilityHandler);
           }
         }
       } catch (err) {
@@ -697,13 +710,25 @@
       else if (action === "reload-shipments") await renderView();
       else if (action === "refresh-tasks") await renderView();
       else if (action === "respond-assignment") { button.disabled = true; await post(`/assignments/${id}/respond`, { action: button.dataset.response }); showToast(button.dataset.response === "ACCEPT" ? "Đã nhận đơn." : "Đã từ chối đơn."); await renderView(); }
+      else if (action === "cancel-shipment") {
+        const reason = window.prompt("Nhập lý do hủy đơn:");
+        if (reason === null) return;
+        if (!reason.trim()) { showToast("Vui lòng nhập lý do hủy đơn.", "error"); return; }
+        button.disabled = true;
+        await post(`/shipments/${id}/transition`, { toStatus: "CANCELLED", reason: reason.trim() });
+        showToast("Đã hủy đơn hàng thành công.", "warning");
+        await renderView();
+      }
       else if (action === "transition") { button.disabled = true; await post(`/shipments/${id}/transition`, { toStatus: button.dataset.status }); showToast("Đã cập nhật trạng thái đơn."); await renderView(); }
       else if (action === "driver-status") { await patch("/drivers/me/status", { status: button.dataset.status }); showToast(`Trạng thái: ${button.dataset.status === "AVAILABLE" ? "Sẵn sàng" : "Ngoại tuyến"}.`); await renderView(); }
       else if (action === "update-driver-location") {
         if (!navigator.geolocation) throw new Error("Trình duyệt này không hỗ trợ lấy vị trí GPS.");
         button.disabled = true;
-        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }));
-        await patch("/drivers/me/location", { lat: position.coords.latitude, lng: position.coords.longitude });
+        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }));
+        const rawAccuracy = Number(position.coords.accuracy);
+        const accuracyM = Number.isFinite(rawAccuracy) && rawAccuracy > 0 ? Math.min(Math.max(rawAccuracy, 0.01), 35) : 15;
+        const capturedAt = new Date().toISOString();
+        await patch("/drivers/me/location", { lat: position.coords.latitude, lng: position.coords.longitude, accuracyM, capturedAt });
         showToast("Đã cập nhật vị trí GPS. Bạn có thể nhận phân công mới.");
         await renderView();
       }

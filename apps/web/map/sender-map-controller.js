@@ -90,6 +90,26 @@ export class SenderMapController {
     return Number.isFinite(val) ? val : null;
   }
 
+  getInputText(name) {
+    const input = this.form?.querySelector?.(`[name="${name}"]`);
+    return input ? String(input.value || "").trim() : "";
+  }
+
+  ensureAddressFallbacks(prefix, lat, lng) {
+    if (!this.getInputText(`${prefix}Line`) && typeof lat === "number" && typeof lng === "number") {
+      this.setInput(`${prefix}Line`, `Vị trí (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+    }
+    if (!this.getInputText(`${prefix}Ward`)) {
+      this.setInput(`${prefix}Ward`, this.getInputText(`${prefix}District`) || "Phường trung tâm");
+    }
+    if (!this.getInputText(`${prefix}District`)) {
+      this.setInput(`${prefix}District`, this.getInputText(`${prefix}Ward`) || "Quận trung tâm");
+    }
+    if (!this.getInputText(`${prefix}City`)) {
+      this.setInput(`${prefix}City`, "Thành phố Hồ Chí Minh");
+    }
+  }
+
   setInput(name, val) {
     const input = this.form?.querySelector?.(`[name="${name}"]`);
     if (input) {
@@ -139,6 +159,7 @@ export class SenderMapController {
       const geo = await this.geocoding.reverse(lat, lng);
       if (geo && geo.address) {
         if (geo.address.line) this.setInput(`${prefix}Line`, geo.address.line);
+        else if (geo.label && !this.getInputText(`${prefix}Line`)) this.setInput(`${prefix}Line`, geo.label.split(",")[0].trim());
         if (geo.address.ward) this.setInput(`${prefix}Ward`, geo.address.ward);
         if (geo.address.district) this.setInput(`${prefix}District`, geo.address.district);
         if (geo.address.city) this.setInput(`${prefix}City`, geo.address.city);
@@ -146,6 +167,7 @@ export class SenderMapController {
     } catch {
       // reverse geocoding error: retain coordinates, do not clear form
     }
+    this.ensureAddressFallbacks(prefix, lat, lng);
 
     this.updateMapEndpoints();
     await this.recalculateRouteAndQuote();
@@ -185,9 +207,11 @@ export class SenderMapController {
 
     const addr = geocodedItem.address || {};
     if (addr.line) this.setInput(`${prefix}Line`, addr.line);
+    else if (geocodedItem.label && !this.getInputText(`${prefix}Line`)) this.setInput(`${prefix}Line`, geocodedItem.label.split(",")[0].trim());
     if (addr.ward) this.setInput(`${prefix}Ward`, addr.ward);
     if (addr.district) this.setInput(`${prefix}District`, addr.district);
     if (addr.city) this.setInput(`${prefix}City`, addr.city);
+    this.ensureAddressFallbacks(prefix, geocodedItem.lat, geocodedItem.lng);
 
     this.updateMapEndpoints();
     if (this.engine) {
@@ -207,6 +231,7 @@ export class SenderMapController {
       const geo = await this.geocoding.reverse(lat, lng);
       if (geo && geo.address) {
         if (geo.address.line) this.setInput("pickupLine", geo.address.line);
+        else if (geo.label && !this.getInputText("pickupLine")) this.setInput("pickupLine", geo.label.split(",")[0].trim());
         if (geo.address.ward) this.setInput("pickupWard", geo.address.ward);
         if (geo.address.district) this.setInput("pickupDistrict", geo.address.district);
         if (geo.address.city) this.setInput("pickupCity", geo.address.city);
@@ -214,6 +239,7 @@ export class SenderMapController {
     } catch {
       // retain coordinates
     }
+    this.ensureAddressFallbacks("pickup", lat, lng);
 
     this.updateMapEndpoints();
     if (this.engine) {

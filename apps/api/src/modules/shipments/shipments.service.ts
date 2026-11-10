@@ -166,10 +166,42 @@ export class ShipmentsService {
       });
       if (!assignment) throw new ForbiddenException();
     }
-    return {
-      ...shipment,
-      navigationUrls: null,
-    };
+    if (
+      shipment.pickupAddressId &&
+      shipment.dropoffAddressId &&
+      typeof this.db.$queryRaw === "function"
+    ) {
+      const locations = await this.db.$queryRaw<
+        Array<{
+          pickupLat: number;
+          pickupLng: number;
+          dropoffLat: number;
+          dropoffLng: number;
+        }>
+      >`
+        SELECT
+          ST_Y(p.location::geometry)::double precision AS "pickupLat",
+          ST_X(p.location::geometry)::double precision AS "pickupLng",
+          ST_Y(d.location::geometry)::double precision AS "dropoffLat",
+          ST_X(d.location::geometry)::double precision AS "dropoffLng"
+        FROM "Address" p
+        JOIN "Address" d ON d.id = ${shipment.dropoffAddressId}::uuid
+        WHERE p.id = ${shipment.pickupAddressId}::uuid
+      `;
+      const coords = locations && locations.length > 0 ? locations[0] : null;
+      if (coords) {
+        return {
+          ...shipment,
+          pickup: shipment.pickup
+            ? { ...shipment.pickup, lat: coords.pickupLat, lng: coords.pickupLng }
+            : { lat: coords.pickupLat, lng: coords.pickupLng },
+          dropoff: shipment.dropoff
+            ? { ...shipment.dropoff, lat: coords.dropoffLat, lng: coords.dropoffLng }
+            : { lat: coords.dropoffLat, lng: coords.dropoffLng },
+        };
+      }
+    }
+    return shipment;
   }
   async tracking(code: string) {
     const shipment = await this.db.shipment.findUnique({
@@ -303,8 +335,8 @@ export class ShipmentsService {
           }>
         >`
           SELECT
-            ST_Y(d.location::geometry)::double precision AS lat,
-            ST_X(d.location::geometry)::double precision AS lng,
+            ST_Y(d."currentLocation"::geometry)::double precision AS lat,
+            ST_X(d."currentLocation"::geometry)::double precision AS lng,
             d."locationAccuracyM" AS "accuracyM",
             d."locationCapturedAt" AS "capturedAt"
           FROM "Driver" d
@@ -547,8 +579,8 @@ export class ShipmentsService {
         }>
       >`
         SELECT
-          ST_Y(d.location::geometry)::double precision AS lat,
-          ST_X(d.location::geometry)::double precision AS lng,
+          ST_Y(d."currentLocation"::geometry)::double precision AS lat,
+          ST_X(d."currentLocation"::geometry)::double precision AS lng,
           d."locationAccuracyM" AS "accuracyM",
           d."locationCapturedAt" AS "capturedAt"
         FROM "Driver" d
@@ -684,8 +716,8 @@ export class ShipmentsService {
       }>
     >`
       SELECT
-        ST_Y(d.location::geometry)::double precision AS lat,
-        ST_X(d.location::geometry)::double precision AS lng,
+        ST_Y(d."currentLocation"::geometry)::double precision AS lat,
+        ST_X(d."currentLocation"::geometry)::double precision AS lng,
         d."locationAccuracyM" AS "accuracyM",
         d."locationCapturedAt" AS "capturedAt"
       FROM "Driver" d

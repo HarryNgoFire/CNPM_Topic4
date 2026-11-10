@@ -190,13 +190,18 @@ export function addResponseContracts(doc: OpenAPIObject) {
       attribution: text,
     }),
   };
-  schemas.AddressResponse = object({
-    id: uuid,
-    line: text,
-    ward: text,
-    district: text,
-    city: text,
-  });
+  schemas.AddressResponse = object(
+    {
+      id: uuid,
+      line: text,
+      ward: text,
+      district: text,
+      city: text,
+      lat: { type: "number", minimum: -90, maximum: 90 },
+      lng: { type: "number", minimum: -180, maximum: 180 },
+    },
+    ["id", "line", "ward", "district", "city"],
+  );
   schemas.ParcelResponse = object({
     id: uuid,
     shipmentId: uuid,
@@ -213,10 +218,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
     changedBy: uuid,
     occurredAt: date,
   });
-  schemas.NavigationUrls = object({
-    pickup: { type: "string", format: "uri" },
-    dropoff: { type: "string", format: "uri" },
-  });
   schemas.ShipmentDetailResponse = {
     allOf: [
       ref("ShipmentResponse"),
@@ -225,9 +226,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
         pickup: ref("AddressResponse"),
         dropoff: ref("AddressResponse"),
         history: array("HistoryResponse"),
-        navigationUrls: {
-          oneOf: [ref("NavigationUrls"), { type: "null" }],
-        },
       }),
     ],
   };
@@ -244,9 +242,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
               dropoff: ref("AddressResponse"),
             }),
           ],
-        },
-        navigationUrls: {
-          oneOf: [ref("NavigationUrls"), { type: "null" }],
         },
       }),
     ],

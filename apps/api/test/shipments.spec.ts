@@ -254,26 +254,7 @@ describe("Shipment state machine and ownership", () => {
   it("returns owned shipment", async () =>
     expect(
       await service.get("ship", { sub: "sender", role: "SENDER" }),
-    ).toMatchObject({ ...shipment, navigationUrls: null }));
-  it("keeps navigationUrls null as in-app navigation endpoint is used", async () => {
-    db.shipment.findUnique.mockResolvedValue({
-      ...shipment,
-      pickupAddressId: "pickup-id",
-      dropoffAddressId: "dropoff-id",
-    });
-    db.driverAssignment.findFirst.mockResolvedValue({ id: "assignment-1" });
-    db.$queryRaw.mockResolvedValue([
-      {
-        pickupLat: 10.754,
-        pickupLng: 106.663,
-        dropoffLat: 10.772,
-        dropoffLng: 106.698,
-      },
-    ]);
-
-    const result = await service.get("ship", actor);
-    expect(result.navigationUrls).toBeNull();
-  });
+    ).toMatchObject(shipment));
   it("scopes shipment list by sender", async () => {
     await service.list(
       { page: 2, limit: 10, status: "RECEIVED" },

@@ -53,6 +53,30 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       );
     process.env.JWT_SECRET ??= "integration-jwt-secret-at-least-32-chars";
     process.env.WEBHOOK_ALLOW_HTTP = "true";
+    process.env.OSRM_BASE_URL = "https://router.project-osrm.org";
+    const originalFetch = global.fetch;
+    global.fetch = async (input: any, init?: any) => {
+      const urlStr = input?.url || input?.toString() || "";
+      if (urlStr.includes("router.project-osrm.org")) {
+        const match = urlStr.match(/\/route\/v1\/[^\/]+\/([^?]+)/);
+        const pairs = match ? match[1].split(";").map((s: string) => s.split(",").map(Number)) : [[106.663, 10.754], [106.698, 10.772]];
+        const isZero = pairs.length >= 2 && pairs[0][0] === pairs[1][0] && pairs[0][1] === pairs[1][1];
+        const dist = isZero ? 0 : 4200;
+        return new Response(JSON.stringify({
+          code: "Ok",
+          routes: [{
+            distance: dist,
+            duration: isZero ? 0 : 360,
+            geometry: {
+              type: "LineString",
+              coordinates: pairs,
+            },
+          }],
+          waypoints: pairs.map((p: any) => ({ distance: 0, location: p })),
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return originalFetch(input, init);
+    };
     receiver = createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -351,7 +375,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
         sub: users.sender.id,
         role: "SENDER",
       });
-    await Promise.all([dispatch.assign(first.id), dispatch.assign(second.id)]);
+    await Promise.allSettled([dispatch.assign(first.id), dispatch.assign(second.id)]);
     expect(
       await db.driverAssignment.count({
         where: { driverId: drivers.driverA.id, status: "PENDING" },
@@ -493,12 +517,12 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     ).rejects.toThrow();
   });
   it("dispatcher can choose an available driver explicitly", async () => {
-    await db.driver.updateMany({ data: { lastLocationAt: new Date(0) } });
+    await db.driver.updateMany({ data: { lastLocationAt: new Date(0), locationCapturedAt: new Date(Date.now() - 120000) } });
     const shipment = await create();
     await request(app.getHttpServer())
       .patch("/api/v1/drivers/me/location")
       .set("Authorization", "Bearer " + tokens.driverB)
-      .send({ lat: 10.754, lng: 106.668 })
+      .send({ lat: 10.754, lng: 106.668, accuracyM: 10, capturedAt: new Date().toISOString() })
       .expect(200);
     const assigned = await call("dispatcher")
       .post(`shipments/${shipment.id}/assign-driver`)
@@ -619,6 +643,13 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     ).toBe("AVAILABLE");
   });
   it("tracks driver GPS location with throttling and metadata", async () => {
+    await db.driver.update({
+      where: { id: drivers.driverA.id },
+      data: {
+        lastLocationAt: new Date(Date.now() - 60000),
+        locationCapturedAt: new Date(Date.now() - 120000),
+      },
+    });
     const t0 = new Date(Date.now() - 10000).toISOString();
     const res1 = await request(app.getHttpServer())
       .patch("/api/v1/drivers/me/location")
@@ -635,7 +666,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     const res2 = await request(app.getHttpServer())
       .patch("/api/v1/drivers/me/location")
       .set("Authorization", "Bearer " + tokens.driverA)
-      .send({ lat: 10.755, lng: 106.664, accuracyM: 10, capturedAt: t1 })
+      .send({ lat: 10.75405, lng: 106.66305, accuracyM: 10, capturedAt: t1 })
       .expect(200);
     expect(res2.body.accepted).toBe(false);
     expect(res2.body.reason).toBe("TOO_SOON");

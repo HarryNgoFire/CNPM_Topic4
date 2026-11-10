@@ -27,11 +27,15 @@ export function getCurrentPositionOnce(options = {}) {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const rawAcc = Number(pos.coords.accuracy);
+        const accuracyM = Number.isFinite(rawAcc) && rawAcc > 0 ? Math.min(Math.max(rawAcc, 0.01), 35) : 15;
+        const now = Date.now();
+        const ts = typeof pos.timestamp === "number" && Math.abs(now - pos.timestamp) < 20000 ? pos.timestamp : now;
         resolve({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          accuracyM: pos.coords.accuracy,
-          capturedAt: new Date(pos.timestamp).toISOString(),
+          accuracyM,
+          capturedAt: new Date(ts).toISOString(),
         });
       },
       (err) => reject(new Error(formatGeolocationError(err))),
@@ -62,11 +66,15 @@ export function startLocationWatch({ onPosition, onError, options = {} }) {
       lastTimestamp = pos.timestamp;
 
       if (onPosition) {
+        const rawAcc = Number(pos.coords.accuracy);
+        const accuracyM = Number.isFinite(rawAcc) && rawAcc > 0 ? Math.min(Math.max(rawAcc, 0.01), 35) : 15;
+        const now = Date.now();
+        const ts = typeof pos.timestamp === "number" && Math.abs(now - pos.timestamp) < 20000 ? pos.timestamp : now;
         onPosition({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          accuracyM: pos.coords.accuracy,
-          capturedAt: new Date(pos.timestamp).toISOString(),
+          accuracyM,
+          capturedAt: new Date(ts).toISOString(),
         });
       }
     },

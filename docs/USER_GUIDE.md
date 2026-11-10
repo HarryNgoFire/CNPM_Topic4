@@ -115,7 +115,7 @@ Quãng đường tính phí được lấy từ OSRM dựa trên hai tọa độ
 ### Tài xế
 1. Đăng nhập tài khoản `DRIVER` đã được cấp và xác minh.
 2. Mở **Công việc của tôi**.
-3. Nhận/từ chối đơn; dùng **Đi đến điểm lấy hàng/điểm giao hàng** để mở Google Maps.
+3. Nhận/từ chối đơn; xem lộ trình và điều hướng trực tiếp trên bản đồ tích hợp trong ứng dụng.
 4. Cập nhật trạng thái theo tiến trình thực tế.
 
 ## 6. Bảo mật và giới hạn MVP
