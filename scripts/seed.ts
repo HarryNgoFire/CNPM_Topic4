@@ -81,7 +81,7 @@ async function main() {
       }
     }
 
-    console.log(`Pricing and demo users seeded with fixed demo accounts using DEMO_PASSWORD=${configuredPassword}.`);
+    console.log("Pricing and demo users seeded with fixed demo accounts.");
   } finally {
     await db.$disconnect();
   }
