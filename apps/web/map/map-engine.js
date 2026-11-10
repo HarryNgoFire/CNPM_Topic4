@@ -7,26 +7,23 @@ export const DEFAULT_STYLE_URL = "/maps/styles/moveflow/style.json";
 export const FALLBACK_RASTER_STYLE = {
   version: 8,
   sources: {
-    "carto-tiles": {
+    "osm-de-tiles": {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
       ],
       tileSize: 256,
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     },
   },
   layers: [
     {
-      id: "carto-tiles-layer",
+      id: "osm-de-tiles-layer",
       type: "raster",
-      source: "carto-tiles",
+      source: "osm-de-tiles",
       minzoom: 0,
-      maxzoom: 20,
+      maxzoom: 19,
     },
   ],
 };
