@@ -4,46 +4,29 @@
 
 export const DEFAULT_STYLE_URL = "/maps/styles/moveflow/style.json";
 
-export const DEFAULT_STYLE = {
+export const FALLBACK_RASTER_STYLE = {
   version: 8,
-  name: "MoveFlow Vector Self-Host",
   sources: {
-    openmaptiles: {
-      type: "vector",
-      tiles: ["/maps/data/v3/{z}/{x}/{y}.pbf"],
+    "osm-tiles": {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
       attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, © <a href="https://openmaptiles.org/">OpenMapTiles</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     },
   },
   layers: [
     {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#f8f9fa" },
-    },
-    {
-      id: "water",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "water",
-      paint: { "fill-color": "#c4e3f3" },
-    },
-    {
-      id: "building",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "building",
-      paint: { "fill-color": "#e0dfdb", "fill-outline-color": "#d0cfcb" },
-    },
-    {
-      id: "transportation",
-      type: "line",
-      source: "openmaptiles",
-      "source-layer": "transportation",
-      paint: { "line-color": "#ffffff", "line-width": 2 },
+      id: "osm-tiles-layer",
+      type: "raster",
+      source: "osm-tiles",
+      minzoom: 0,
+      maxzoom: 19,
     },
   ],
 };
+
+export const DEFAULT_STYLE = FALLBACK_RASTER_STYLE;
 
 function emptyFeatureCollection() {
   return {
@@ -125,7 +108,7 @@ export class MapEngine {
     this.markerB = null;
     this.markerDriver = null;
 
-    const style = styleUrl || (typeof window !== "undefined" && window.__MOVEFLOW_MAP_STYLE__) || DEFAULT_STYLE_URL;
+    const style = styleUrl || (typeof window !== "undefined" && window.__MOVEFLOW_MAP_STYLE__) || DEFAULT_STYLE;
 
     this.map = new maplibregl.Map({
       container: this.container,
@@ -141,17 +124,28 @@ export class MapEngine {
     );
     this.map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+    let fallbackAttempted = false;
     this._readyPromise = new Promise((resolve, reject) => {
-      this.map.once("load", () => {
+      const onLoad = () => {
         try {
           this._initLayers();
           resolve();
         } catch (err) {
           reject(err);
         }
-      });
-      this.map.once("error", (e) => {
-        if (!this.map.loaded()) {
+      };
+
+      this.map.once("load", onLoad);
+      this.map.on("error", (e) => {
+        if (!this.map.loaded() && !fallbackAttempted) {
+          fallbackAttempted = true;
+          try {
+            this.map.setStyle(FALLBACK_RASTER_STYLE);
+            this.map.once("styledata", () => onLoad());
+          } catch {
+            reject(e.error || new Error("Failed to load map style"));
+          }
+        } else if (!this.map.loaded() && fallbackAttempted) {
           reject(e.error || new Error("Failed to load map style"));
         }
       });
