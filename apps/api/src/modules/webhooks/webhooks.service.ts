@@ -83,6 +83,17 @@ export class WebhooksService {
       createdAt: row.createdAt,
     };
   }
+  subscriptions() {
+    return this.db.webhookSubscription.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        active: true,
+        createdAt: true,
+      },
+    });
+  }
   events(page: PageDto) {
     return this.db.webhookEvent.findMany({
       skip: (page.page - 1) * page.limit,

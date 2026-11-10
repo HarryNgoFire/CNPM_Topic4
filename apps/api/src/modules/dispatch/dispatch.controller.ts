@@ -35,4 +35,7 @@ export class DispatchController {
   @Get("dispatch/queue") @Roles("DISPATCHER", "ADMIN") queue() {
     return this.service.queue();
   }
+  @Get("dispatch/drivers") @Roles("DISPATCHER", "ADMIN") drivers() {
+    return this.service.drivers();
+  }
 }

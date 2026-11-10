@@ -316,10 +316,37 @@ export class DispatchService {
         status: "RECEIVED",
         assignments: { none: { status: { in: ["PENDING", "ACCEPTED"] } } },
       },
-      include: { assignments: { orderBy: { assignedAt: "desc" }, take: 1 } },
+      include: {
+        assignments: { orderBy: { assignedAt: "desc" } },
+        pickup: true,
+        dropoff: true,
+      },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
+  }
+  async drivers() {
+    const list = await this.db.driver.findMany({
+      include: {
+        user: { select: { id: true, name: true, email: true, active: true } },
+        assignments: {
+          where: { status: { in: ["PENDING", "ACCEPTED"] } },
+          select: { id: true, status: true, shipmentId: true },
+        },
+      },
+    });
+    return list.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      name: d.user?.name || "Tài xế",
+      email: d.user?.email,
+      vehicleType: d.vehicleType,
+      status: d.status,
+      active: d.user?.active,
+      isAvailable: d.status === "AVAILABLE" && d.assignments.length === 0,
+      activeTasksCount: d.assignments.length,
+      lastLocationAt: d.lastLocationAt,
+    }));
   }
   async expireOne(id: string) {
     const initial = await this.db.driverAssignment.findUnique({
