@@ -1,13 +1,15 @@
 # MoveFlow — Last-Mile Delivery & Parcel Tracking System
 
-**Bản triển khai MoveFlow Unified Map:** Hệ thống giao nhận chặng cuối hoàn chỉnh với backend NestJS, cơ sở dữ liệu PostgreSQL/PostGIS, và giao diện web SPA tích hợp bản đồ vector **MapLibre GL v4.7.1**. Hệ thống hỗ trợ định tuyến và tính phí bằng **OSRM**, tìm kiếm địa chỉ tiếng Việt qua **Nominatim proxy**, quy trình giao hàng hai chặng có bảo vệ geofence 100m, theo dõi vị trí tài xế trực tiếp (live tracking) và hạ tầng bản đồ tự lưu trữ tùy chọn qua `compose.maps.yaml`. Xem chi tiết tại:
-- [Kiến trúc bản đồ thống nhất](docs/maps/architecture.md)
-- [Hướng dẫn vận hành bản đồ](docs/maps/operations.md)
-- [Báo cáo kiểm thử & xác minh](docs/maps/verification.md)
-- [Hướng dẫn sử dụng MoveFlow](docs/USER_GUIDE.md)
+**Bản triển khai MoveFlow Unified Map & Demo Toolkit:** Hệ thống giao nhận chặng cuối hoàn chỉnh với backend NestJS, cơ sở dữ liệu PostgreSQL/PostGIS, và giao diện web SPA tích hợp bản đồ vector **MapLibre GL v4.7.1**. Hệ thống hỗ trợ định tuyến và tính phí bằng **OSRM**, tìm kiếm địa chỉ tiếng Việt qua **Nominatim proxy**, quy trình giao hàng hai chặng có bảo vệ geofence 100m, theo dõi vị trí tài xế trực tiếp (live tracking), bộ công cụ kiểm thử **MoveFlow Demo Tools** (mô phỏng xe chạy OSRM, điều chỉnh tốc độ, mock GPS, đổi vai trò 1-click) và hạ tầng bản đồ tự lưu trữ tùy chọn qua compose.maps.yaml.
 
-> **Lưu ý:** README này còn giữ một số chương thiết kế/đề xuất từ giai đoạn lập kế hoạch. Với trạng thái chức năng hiện tại và cách chạy, ưu tiên `docs/USER_GUIDE.md`; các tính năng chưa triển khai hoặc chưa được kiểm thử đầy đủ được liệt kê trong `docs/DEVELOPER_REVIEW_AND_REMEDIATION.md`.
-
+Tài liệu hướng dẫn và vận hành chi tiết:
+- 📖 [**Sổ tay Hỗ trợ & Kiểm thử nhanh (HELPER.md)**](HELPER.md) — *Cheat sheet tài khoản test, Demo Tools, điều khiển tốc độ xe, mô phỏng GPS.*
+- 📘 [Hướng dẫn sử dụng MoveFlow](docs/USER_GUIDE.md) — *Tài liệu hướng dẫn nghiệp vụ các vai trò Sender, Driver, Dispatcher, Admin.*
+- 🗺️ [Kiến trúc bản đồ thống nhất](docs/maps/architecture.md) — *Thiết kế MapLibre GL, GeoJSON reactive sources và OSRM integration.*
+- ⚙️ [Hướng dẫn vận hành bản đồ](docs/maps/operations.md) — *Vận hành hạ tầng bản đồ tự lưu trữ và public fallbacks.*
+- 🧪 [Báo cáo kiểm thử & xác minh](docs/maps/verification.md) — *Kết quả kiểm thử đơn vị, kiểm thử nghiệp vụ và kiểm thử hợp đồng.*
+- 📧 [Cấu hình gửi email OTP qua Gmail SMTP](docs/EMAIL_OTP_SETUP.md) — *Hướng dẫn thiết lập Nodemailer và Google App Password.*
+- 🛠️ [Báo cáo đánh giá nhà phát triển](docs/DEVELOPER_REVIEW_AND_REMEDIATION.md) — *Đánh giá kiến trúc, khắc phục rủi ro và giải pháp kỹ thuật.*
 ---
 
 ## Mục lục
@@ -42,7 +44,7 @@ Dự án cũng đề xuất một chatbot hỗ trợ người dùng dựa trên 
 
 ### Trạng thái của repository
 
-Repository hiện có một **hệ thống hoàn chỉnh có thể chạy bằng Docker Compose** gồm REST API, giao diện MoveFlow tích hợp MapLibre GL, schema/migrations PostGIS, xác minh email OTP, pricing/dispatch/tracking bằng OSRM và điều hướng dẫn đường 2 chặng có geofence. Toàn bộ các kiểm thử đơn vị, kiểm thử nghiệp vụ và kiểm thử hợp đồng API đều đạt 100% (397 tests backend, 13 tests frontend).
+Repository hiện có một **hệ thống hoàn chỉnh có thể chạy bằng Docker Compose** gồm REST API, giao diện MoveFlow tích hợp MapLibre GL, schema/migrations PostGIS, xác minh email OTP, pricing/dispatch/tracking bằng OSRM và điều hướng dẫn đường 2 chặng có geofence. Toàn bộ các kiểm thử đơn vị, kiểm thử nghiệp vụ và kiểm thử hợp đồng API đều đạt 100% (349+ tests backend, 45 tests frontend).
 
 ---
 
