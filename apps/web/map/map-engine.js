@@ -60,18 +60,24 @@ function createMarkerElement(label, color) {
 function createDriverMarkerElement() {
   const el = document.createElement("div");
   el.className = "moveflow-marker moveflow-marker-driver";
-  el.style.width = "34px";
-  el.style.height = "34px";
+  el.style.width = "40px";
+  el.style.height = "40px";
   el.style.borderRadius = "50%";
   el.style.backgroundColor = "#2563eb";
   el.style.color = "#ffffff";
   el.style.display = "flex";
   el.style.alignItems = "center";
   el.style.justifyContent = "center";
-  el.style.fontSize = "16px";
-  el.style.boxShadow = "0 0 0 4px rgba(37,99,235,0.35), 0 2px 6px rgba(0,0,0,0.35)";
-  el.style.border = "2px solid #ffffff";
-  el.innerHTML = "🛵";
+  el.style.fontSize = "20px";
+  el.style.boxShadow = "0 3px 10px rgba(0,0,0,0.3)";
+  el.style.border = "2.5px solid #ffffff";
+  el.style.zIndex = "1000";
+  el.style.cursor = "pointer";
+  el.style.position = "relative";
+  el.innerHTML = `
+    <div class="driver-marker-icon">🛵</div>
+    <div class="driver-heading-pointer"></div>
+  `;
   return el;
 }
 
@@ -84,6 +90,10 @@ export class MapEngine {
     onDragPickup = null,
     onDragDropoff = null,
     onClick = null,
+    topPadding = 0,
+    bottomPadding = 0,
+    leftPadding = 0,
+    rightPadding = 0,
   }) {
     this.container =
       typeof container === "string"
@@ -103,6 +113,10 @@ export class MapEngine {
     this.onDragPickup = onDragPickup;
     this.onDragDropoff = onDragDropoff;
     this.onClick = onClick;
+    this.topPadding = topPadding;
+    this.bottomPadding = bottomPadding;
+    this.leftPadding = leftPadding;
+    this.rightPadding = rightPadding;
     this.pickup = null;
     this.dropoff = null;
     this.driverLocation = null;
@@ -120,7 +134,29 @@ export class MapEngine {
       center: initialCenter,
       zoom: initialZoom,
       attributionControl: false,
+      trackResize: true,
     });
+
+    this._resizeObserver = null;
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (this.map && typeof this.map.resize === "function") {
+          try { this.map.resize(); } catch {}
+        }
+      });
+      this._resizeObserver.observe(this.container);
+    }
+
+    if (this.topPadding || this.bottomPadding || this.leftPadding || this.rightPadding) {
+      try {
+        this.map.setPadding({
+          top: this.topPadding,
+          bottom: this.bottomPadding,
+          left: this.leftPadding,
+          right: this.rightPadding,
+        });
+      } catch {}
+    }
 
     this.map.on("click", (e) => {
       if (typeof this.onClick === "function") {
@@ -139,6 +175,11 @@ export class MapEngine {
       const onLoad = () => {
         try {
           this._initLayers();
+          if (this.map && typeof this.map.resize === "function") {
+            try { this.map.resize(); } catch {}
+            setTimeout(() => { try { this.map?.resize(); } catch {} }, 60);
+            setTimeout(() => { try { this.map?.resize(); } catch {} }, 250);
+          }
           resolve();
         } catch (err) {
           reject(err);
@@ -311,11 +352,14 @@ export class MapEngine {
     });
   }
 
-  setDriverLocation(pointOrNull) {
+  setDriverLocation(pointOrNull, panTo = false, bearing = null) {
     this.driverLocation = pointOrNull || null;
-    const maplibregl = window.maplibregl;
+    const maplibregl =
+      (typeof window !== "undefined" && window.maplibregl) ||
+      (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
 
     if (
+      maplibregl &&
       this.driverLocation &&
       typeof this.driverLocation.lat === "number" &&
       typeof this.driverLocation.lng === "number"
@@ -330,6 +374,32 @@ export class MapEngine {
           this.driverLocation.lng,
           this.driverLocation.lat,
         ]);
+      }
+
+      if (typeof bearing === "number") {
+        const markerEl = this.markerDriver.getElement ? this.markerDriver.getElement() : this.markerDriver._element;
+        const iconEl = markerEl?.querySelector(".driver-marker-icon");
+        const pointerEl = markerEl?.querySelector(".driver-heading-pointer");
+        if (iconEl) {
+          iconEl.style.transform = `rotate(${Math.round(bearing + 90)}deg)`;
+        }
+        if (pointerEl) {
+          pointerEl.style.transform = `translate(-50%, -100%) rotate(${Math.round(bearing)}deg)`;
+          pointerEl.style.opacity = "1";
+        }
+      }
+
+      if (panTo && this.map && typeof this.map.easeTo === "function") {
+        this.map.easeTo({
+          center: [this.driverLocation.lng, this.driverLocation.lat],
+          padding: {
+            top: this.topPadding || 0,
+            bottom: this.bottomPadding || 0,
+            left: this.leftPadding || 0,
+            right: this.rightPadding || 0,
+          },
+          duration: 120,
+        });
       }
     } else if (this.markerDriver) {
       this.markerDriver.remove();
@@ -419,11 +489,35 @@ export class MapEngine {
     }
 
     if (pointCount > 0) {
+      const basePad = typeof padding === "number" ? padding : 40;
+      const resolvedPadding = typeof padding === "object"
+        ? padding
+        : {
+            top: basePad + (this.topPadding || 0),
+            bottom: basePad + (this.bottomPadding || 0),
+            left: basePad + (this.leftPadding || 0),
+            right: basePad + (this.rightPadding || 0),
+          };
+
       this.map.fitBounds(bounds, {
-        padding,
+        padding: resolvedPadding,
         maxZoom: 16,
         duration: animate ? duration : 0,
       });
+    }
+  }
+
+  setBottomPadding(bottom) {
+    this.bottomPadding = bottom;
+    if (this.map && typeof this.map.setPadding === "function") {
+      try {
+        this.map.setPadding({
+          top: this.topPadding || 0,
+          bottom: this.bottomPadding || 0,
+          left: this.leftPadding || 0,
+          right: this.rightPadding || 0,
+        });
+      } catch {}
     }
   }
 
@@ -434,6 +528,10 @@ export class MapEngine {
   }
 
   destroy() {
+    if (this._resizeObserver) {
+      try { this._resizeObserver.disconnect(); } catch {}
+      this._resizeObserver = null;
+    }
     if (this.markerA) {
       this.markerA.remove();
       this.markerA = null;
