@@ -2082,9 +2082,9 @@
           <!-- Bản đồ chiếm toàn bộ không gian trung tâm (80% màn hình) -->
           <div id="driver-trip-map" class="driver-cockpit-map"></div>
 
-          <!-- Nút Căn giữa xe & Bám theo lộ trình (Recenter Floating Button) -->
-          <button type="button" class="recenter-btn following" id="btn-driver-recenter" data-action="recenter-driver-map" title="Căn giữa xe & Bám theo lộ trình" style="bottom: 84px; right: 14px;">
-            ${ICONS.locate}
+          <!-- Nút 2-trong-1 Chuyển đổi góc nhìn: Bám sát xe ⇄ Xem toàn tuyến -->
+          <button type="button" class="recenter-btn following" id="btn-driver-recenter" data-action="toggle-driver-camera" title="Bấm để xem toàn tuyến lộ trình" style="bottom: 84px; right: 14px;">
+            <span class="recenter-icon">${ICONS.map}</span>
           </button>
 
           <!-- Bottom Sheet (Kéo / Mở rộng chuẩn app) -->
@@ -3647,10 +3647,14 @@
         await renderView();
       } else if (action === "driver-status") {
         confirmDriverStatusChange(button.dataset.status === "AVAILABLE");
-      } else if (action === "recenter-driver-map") {
+      } else if (action === "toggle-driver-camera" || action === "recenter-driver-map") {
         if (activeDriverTripController) {
-          activeDriverTripController.recenter({ smooth: true });
-          showToast("Đã căn giữa vị trí xe tài xế!", "info");
+          const mode = activeDriverTripController.toggleCameraMode();
+          if (mode === "overview") {
+            showToast("🗺️ Đã chuyển sang góc nhìn xem toàn tuyến lộ trình!", "info");
+          } else {
+            showToast("🎯 Đã chuyển sang góc nhìn bám sát xe!", "info");
+          }
         }
       } else if (action === "update-driver-location") {
         if (isMockGpsEnabled()) {

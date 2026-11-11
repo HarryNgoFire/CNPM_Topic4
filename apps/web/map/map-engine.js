@@ -100,6 +100,8 @@ export class MapEngine {
     bottomPadding = 0,
     leftPadding = 0,
     rightPadding = 0,
+    isDriver = false,
+    autoRecenterEnabled = null,
   }) {
     this.container =
       typeof container === "string"
@@ -124,6 +126,7 @@ export class MapEngine {
     this.bottomPadding = bottomPadding;
     this.leftPadding = leftPadding;
     this.rightPadding = rightPadding;
+    this.isDriver = Boolean(isDriver);
     this.pickup = null;
     this.dropoff = null;
     this.driverLocation = null;
@@ -133,13 +136,16 @@ export class MapEngine {
     this.markerB = null;
     this.markerDriver = null;
 
-    this.autoFollow = true;
-    this.autoRecenterEnabled = true;
+    // Auto Recenter & Auto Follow chỉ áp dụng riêng cho tài xế (isDriver: true)
+    this.autoRecenterEnabled = autoRecenterEnabled !== null ? Boolean(autoRecenterEnabled) : this.isDriver;
+    this.autoFollow = this.isDriver;
+    this.cameraMode = "follow"; // "follow" | "overview"
     this.autoRecenterTimeoutMs = 5000;
     this.targetNavigationZoom = 16.2;
     this._recenterTimer = null;
     this._isUserInteracting = false;
     this._onAutoFollowChange = null;
+    this._onCameraModeChange = null;
     this._domInteractionCleanups = [];
 
     const style = styleUrl || (typeof window !== "undefined" && window.__MOVEFLOW_MAP_STYLE__) || DEFAULT_STYLE;
@@ -279,7 +285,9 @@ export class MapEngine {
     this.pickup = pickup || null;
     this.dropoff = dropoff || null;
 
-    const maplibregl = window.maplibregl;
+    const maplibregl =
+      (typeof window !== "undefined" ? window.maplibregl : null) ||
+      (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
 
     // Pickup marker A
     if (this.pickup && typeof this.pickup.lat === "number" && typeof this.pickup.lng === "number") {
@@ -476,7 +484,9 @@ export class MapEngine {
   }
 
   fitRelevantPoints({ padding = 50, animate = true, duration = 800 } = {}) {
-    const maplibregl = window.maplibregl;
+    const maplibregl =
+      (typeof window !== "undefined" ? window.maplibregl : null) ||
+      (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
     if (!maplibregl) return;
 
     const bounds = new maplibregl.LngLatBounds();
@@ -603,6 +613,9 @@ export class MapEngine {
   _handleUserInteractionStart() {
     this._isUserInteracting = true;
     this.pauseAutoFollow();
+    if (typeof this._onCameraModeChange === "function") {
+      try { this._onCameraModeChange("panned"); } catch {}
+    }
   }
 
   _handleUserInteractionEnd() {
@@ -624,6 +637,7 @@ export class MapEngine {
     this._clearRecenterTimer();
     if (!this.isAutoRecenterConfigured()) return;
     if (this.autoFollow) return;
+    if (this.cameraMode === "overview") return; // Khi tài xế chủ động xem toàn tuyến, không tự kéo về xe
     if (!this.driverLocation) return;
 
     this._recenterTimer = setTimeout(() => {
@@ -642,6 +656,7 @@ export class MapEngine {
   }
 
   isAutoRecenterConfigured() {
+    if (!this.isDriver && !this.autoRecenterEnabled) return false;
     if (this.autoRecenterEnabled === false) return false;
     try {
       if (typeof localStorage !== "undefined") {
@@ -649,6 +664,33 @@ export class MapEngine {
       }
     } catch {}
     return true;
+  }
+
+  showRouteOverview({ smooth = true, duration = 800 } = {}) {
+    this._clearRecenterTimer();
+    this.autoFollow = false;
+    this.cameraMode = "overview";
+
+    this.fitRelevantPoints(50, smooth, duration);
+
+    if (typeof this._onCameraModeChange === "function") {
+      try { this._onCameraModeChange("overview"); } catch {}
+    }
+    if (typeof this._onAutoFollowChange === "function") {
+      try { this._onAutoFollowChange(false); } catch {}
+    }
+  }
+
+  toggleCameraMode() {
+    // Nếu đang bám sát xe -> chuyển sang xem toàn tuyến lộ trình
+    // Nếu đang xem toàn tuyến hoặc đã vuốt lệch -> quay lại bám sát xe
+    if (this.cameraMode === "follow" && this.autoFollow) {
+      this.showRouteOverview({ smooth: true });
+      return "overview";
+    } else {
+      this.recenterOnDriver({ smooth: true });
+      return "follow";
+    }
   }
 
   recenterOnDriver({ smooth = true, duration = 1000, zoom = null } = {}) {
@@ -702,6 +744,10 @@ export class MapEngine {
     }
 
     this.autoFollow = true;
+    this.cameraMode = "follow";
+    if (typeof this._onCameraModeChange === "function") {
+      try { this._onCameraModeChange("follow"); } catch {}
+    }
     if (typeof this._onAutoFollowChange === "function") {
       try { this._onAutoFollowChange(true); } catch {}
     }

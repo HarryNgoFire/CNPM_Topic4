@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MapEngine } from "../map/map-engine.js";
-import { DriverTripController } from "../map/driver-trip-controller.js";
 
 // Mock minimal DOM and MapLibre for testing
 function createMockContainer() {
@@ -29,6 +28,7 @@ function createMockMapLibre(events = {}) {
     flyTo: [],
     easeTo: [],
     setCenter: [],
+    fitBounds: [],
   };
 
   class MockMap {
@@ -64,6 +64,9 @@ function createMockMapLibre(events = {}) {
       if (opts.center) center = opts.center;
       if (opts.zoom) zoom = opts.zoom;
     }
+    fitBounds(bounds, opts) {
+      calls.fitBounds.push({ bounds, opts });
+    }
     setCenter(c) {
       calls.setCenter.push(c);
       center = c;
@@ -94,16 +97,41 @@ function createMockMapLibre(events = {}) {
   };
 }
 
-test("Auto Recenter - initial state has autoFollow active and autoRecenter enabled", async () => {
+test("Auto Recenter - driver initial state has autoFollow active and autoRecenter enabled", async () => {
   const container = createMockContainer();
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   await engine.ready();
 
+  assert.equal(engine.isDriver, true);
   assert.equal(engine.autoFollow, true);
+  assert.equal(engine.cameraMode, "follow");
   assert.equal(engine.isAutoRecenterConfigured(), true);
+
+  engine.destroy();
+});
+
+test("Auto Recenter - non-driver (Sender / Customer) does NOT have autoRecenter enabled", async () => {
+  const container = createMockContainer();
+  const mockLib = createMockMapLibre();
+  globalThis.maplibregl = mockLib.maplibregl;
+
+  const engine = new MapEngine({ container, isDriver: false });
+  await engine.ready();
+
+  assert.equal(engine.isDriver, false);
+  assert.equal(engine.autoRecenterEnabled, false);
+  assert.equal(engine.isAutoRecenterConfigured(), false);
+
+  engine.setDriverLocation({ lat: 10.75, lng: 106.66 });
+  engine._handleUserInteractionStart();
+  engine._handleUserInteractionEnd();
+
+  // Wait 60ms
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(mockLib.calls.flyTo.length, 0, "Non-driver should never auto-recenter camera");
 
   engine.destroy();
 });
@@ -113,7 +141,7 @@ test("Auto Recenter - user interaction pauses autoFollow and suppresses panTo du
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   await engine.ready();
 
   let autoFollowReported = null;
@@ -137,13 +165,13 @@ test("Auto Recenter - user interaction pauses autoFollow and suppresses panTo du
   engine.destroy();
 });
 
-test("Auto Recenter - triggers smooth recenter after 5 seconds of inactivity", async () => {
+test("Auto Recenter - triggers smooth recenter after 5 seconds of inactivity for driver", async () => {
   const container = createMockContainer();
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
   // Set timeout to 50ms for speedy test execution
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   engine.autoRecenterTimeoutMs = 50;
   await engine.ready();
 
@@ -175,7 +203,7 @@ test("Auto Recenter - further user interaction resets the 5-second countdown", a
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   engine.autoRecenterTimeoutMs = 60;
   await engine.ready();
 
@@ -207,7 +235,7 @@ test("Auto Recenter - disabled in mock settings prevents auto recenter", async (
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   engine.autoRecenterTimeoutMs = 40;
   engine.autoRecenterEnabled = false; // Disabled via settings
   await engine.ready();
@@ -225,21 +253,38 @@ test("Auto Recenter - disabled in mock settings prevents auto recenter", async (
   engine.destroy();
 });
 
-test("Auto Recenter - manual recenter immediately centers and restores autoFollow", async () => {
+test("Auto Recenter - toggleCameraMode switches between Route Overview and Follow mode", async () => {
   const container = createMockContainer();
   const mockLib = createMockMapLibre();
   globalThis.maplibregl = mockLib.maplibregl;
 
-  const engine = new MapEngine({ container });
+  const engine = new MapEngine({ container, isDriver: true });
   await engine.ready();
 
   engine.setDriverLocation({ lat: 10.77, lng: 106.69 });
-  engine._handleUserInteractionStart();
+  engine.setEndpoints({
+    pickup: { lat: 10.77, lng: 106.69 },
+    dropoff: { lat: 10.79, lng: 106.71 },
+  });
+
+  assert.equal(engine.cameraMode, "follow");
+  assert.equal(engine.autoFollow, true);
+
+  // 1. Toggle to Route Overview
+  const mode1 = engine.toggleCameraMode();
+  assert.equal(mode1, "overview");
+  assert.equal(engine.cameraMode, "overview");
   assert.equal(engine.autoFollow, false);
 
-  // Driver taps Recenter button
-  engine.recenterOnDriver({ smooth: true });
-  assert.equal(engine.autoFollow, true, "autoFollow should be immediately active upon manual recenter");
+  // In overview mode, auto-recenter 5s timer should not yank camera back
+  engine._scheduleAutoRecenter();
+  assert.equal(engine._recenterTimer, null, "Should not schedule timer in explicit overview mode");
+
+  // 2. Toggle back to Follow mode
+  const mode2 = engine.toggleCameraMode();
+  assert.equal(mode2, "follow");
+  assert.equal(engine.cameraMode, "follow");
+  assert.equal(engine.autoFollow, true);
   assert.ok(mockLib.calls.flyTo.length > 0);
 
   engine.destroy();
