@@ -2103,7 +2103,7 @@
             </div>
 
             <div class="sheet-body-collapsible" id="sheet-expanded-body">
-              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:4px">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:4px" id="sheet-sub-header">
                 <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">BẢNG ĐIỀU HÀNH CHUYẾN</span>
                 <div style="display:${isMockGpsEnabled() ? "flex" : "none"};gap:6px;flex-wrap:wrap;align-items:center" id="trip-sim-quick-bar">
                   <select id="trip-sim-speed-select" title="Đặt tốc độ xe tài xế (km/h)" style="font-size:11px;padding:4px 6px;font-weight:700;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--blue);cursor:pointer;width:auto">
@@ -2124,6 +2124,7 @@
                 </div>
               </div>
 
+              <!-- Thẻ chỉ số khi đang di chuyển trên đường -->
               <div class="route-summary-card" id="sheet-metrics" style="padding:10px 14px">
                 <div class="route-summary-item">
                   <span>KHOẢNG CÁCH</span>
@@ -2142,6 +2143,9 @@
                   <strong id="sheet-coords" style="font-family:var(--font-mono);font-size:11px">--</strong>
                 </div>
               </div>
+
+              <!-- Thẻ tổng kết khi hoàn tất giao hàng -->
+              <div id="sheet-completed-card" style="display:none"></div>
 
               <div id="driver-trip-actions" style="display:flex;gap:10px;flex-direction:column">
                 <button class="btn btn-primary btn-block" disabled>Đang tính cự ly GPS...</button>
@@ -2320,108 +2324,209 @@
 
             if (statusEl && status) statusEl.innerHTML = badge(status);
 
-            const distM = arrival.distanceM;
-            const distStr = distM != null ? (distM >= 1000 ? `${(distM / 1000).toFixed(1)} km` : `${Math.round(distM)} m`) : "đang tính...";
-            if (distanceEl) distanceEl.textContent = distStr;
-            const etaText = arrival.eligible ? "Đã đến nơi" : "Đang di chuyển";
-            if (etaEl) etaEl.textContent = etaText;
-            const peekEl = target.querySelector("#sheet-peek-info");
-            if (peekEl) {
-              peekEl.textContent = `${distStr} • ${etaText}`;
-            }
+            const isCompleted = phase === "COMPLETE";
 
-            if (topDistEl) {
-              topDistEl.textContent = `${distStr} • ${arrival.eligible ? "Đã đến" : "Di chuyển"}`;
-            }
+            if (isCompleted) {
+              // 1. Dừng mọi mô phỏng xe chạy còn sót lại & ẩn thanh công cụ mô phỏng
+              window.MoveFlowDemo?.stopMovementSimulation?.();
+              const simBar = target.querySelector("#trip-sim-quick-bar");
+              if (simBar) simBar.style.display = "none";
+              const subHeader = target.querySelector("#sheet-sub-header");
+              if (subHeader) subHeader.style.display = "none";
 
-            const coordsEl = target.querySelector("#sheet-coords");
-            const curLoc = activeDriverTripController?.currentLocation;
-            if (coordsEl && curLoc && Number.isFinite(curLoc.lat) && Number.isFinite(curLoc.lng)) {
-              coordsEl.textContent = `${curLoc.lat.toFixed(5)}, ${curLoc.lng.toFixed(5)}`;
-            }
+              // 2. Ẩn hoàn toàn bảng đo đạc hành trình (Khoảng cách, tốc độ, GPS)
+              const metricsEl = target.querySelector("#sheet-metrics");
+              if (metricsEl) metricsEl.style.display = "none";
 
-            // Tự động mở rộng thanh điều khiển khi xe đã vào bán kính < 100m để tài xế dễ dàng thao tác
-            if (arrival.eligible && typeof isSheetExpanded !== "undefined" && !isSheetExpanded) {
-              setSheetExpanded(true);
-            }
+              // 3. Ẩn nút camera 2-trong-1 vì chuyến đi đã kết thúc
+              const recenterBtn = target.querySelector("#btn-driver-recenter");
+              if (recenterBtn) recenterBtn.style.display = "none";
 
-            // Chỉ dựng lại nút thao tác khi chặng hoặc trạng thái "đã đến" thay đổi
-            const actionsKey = `${phase}|${arrival.eligible ? 1 : 0}`;
-            const actionsTarget = actionsEl && actionsEl.dataset.actionsKey !== actionsKey ? actionsEl : null;
-            if (actionsTarget) actionsTarget.dataset.actionsKey = actionsKey;
+              // 4. Cập nhật tiêu đề & trạng thái chúc mừng hoàn thành
+              if (targetTitleEl) {
+                targetTitleEl.innerHTML = `<span style="color:#059669;font-weight:800;display:flex;align-items:center;gap:6px"><span>🎉</span> Giao hàng hoàn tất!</span>`;
+              }
+              const peekEl = target.querySelector("#sheet-peek-info");
+              if (peekEl) {
+                peekEl.innerHTML = `<span class="status-badge badge-green" style="font-size:11px;padding:2px 8px;font-weight:700">✓ Hoàn tất</span>`;
+              }
+              if (topIconEl) { topIconEl.textContent = "✓"; topIconEl.className = "nav-target-icon target-b"; }
+              if (topNameEl) topNameEl.textContent = "Đã giao hoàn tất";
+              if (topDistEl) topDistEl.textContent = "Thành công";
+              if (badgeEl) { badgeEl.className = "status-badge badge-success"; badgeEl.textContent = "Đã hoàn thành"; }
 
-            if (phase === "TO_PICKUP") {
-              if (topIconEl) { topIconEl.textContent = "📍 A"; topIconEl.className = "nav-target-icon"; }
-              if (topNameEl) topNameEl.textContent = "Điểm lấy hàng (A)";
-              if (badgeEl) { badgeEl.className = "status-badge badge-blue"; badgeEl.textContent = "Chặng 1: Điểm lấy hàng"; }
-              if (targetTitleEl) targetTitleEl.textContent = "Đến điểm lấy hàng (Điểm A)";
-              if (noteEl) noteEl.textContent = arrival.eligible ? "✓ Đã trong phạm vi <100m. Hãy xác nhận đến." : `Cách điểm lấy ~${distStr}.`;
+              // Mở rộng bottom sheet để tài xế xem chi tiết tổng kết
+              if (typeof isSheetExpanded !== "undefined" && !isSheetExpanded) {
+                setSheetExpanded(true);
+              }
+
+              // 5. Hiển thị thẻ tổng kết chi tiết chuyến đi
+              const completedCard = target.querySelector("#sheet-completed-card");
+              if (completedCard) {
+                completedCard.style.display = "block";
+                const shipment = activeTask.shipment || {};
+                const trackingCode = (shipment.trackingCode || activeTask.shipmentId || activeTask.id || "").slice(0, 8);
+                const pickupAddr = shipment.pickup?.formattedAddress || shipment.pickup?.street || shipment.pickupAddress || "Điểm lấy hàng A";
+                const dropoffAddr = shipment.dropoff?.formattedAddress || shipment.dropoff?.street || shipment.dropoffAddress || "Điểm giao hàng B";
+                const feeVal = shipment.fee || shipment.feeBreakdown?.total || 35000;
+                const feeStr = fmtMoney(feeVal);
+                const completedTime = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+
+                completedCard.innerHTML = `
+                  <div class="completed-summary-box">
+                    <div class="completed-summary-hero">
+                      <div class="completed-check-badge">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                      </div>
+                      <div style="flex:1">
+                        <div class="completed-hero-title">Đơn hàng đã được giao tận tay</div>
+                        <div class="completed-hero-sub">Thời gian hoàn tất: <b>${completedTime}</b></div>
+                      </div>
+                    </div>
+
+                    <div class="completed-meta-grid">
+                      <div class="completed-meta-item">
+                        <span class="completed-meta-label">MÃ ĐƠN HÀNG</span>
+                        <span class="completed-meta-val font-mono">📦 #${esc(trackingCode)}</span>
+                      </div>
+                      <div class="completed-meta-item">
+                        <span class="completed-meta-label">THU NHẬP CHUYẾN</span>
+                        <span class="completed-meta-val completed-income">${feeStr}</span>
+                      </div>
+                    </div>
+
+                    <div class="completed-route-recap">
+                      <div class="completed-route-line">
+                        <span class="dot dot-pickup"></span>
+                        <span class="addr-text"><b>Lấy:</b> ${esc(pickupAddr)}</span>
+                      </div>
+                      <div class="completed-route-line">
+                        <span class="dot dot-dropoff"></span>
+                        <span class="addr-text"><b>Giao:</b> ${esc(dropoffAddr)}</span>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+
+              // 6. Nút hành động hoàn tất
+              const actionsKey = `COMPLETE|1`;
+              const actionsTarget = actionsEl && actionsEl.dataset.actionsKey !== actionsKey ? actionsEl : null;
               if (actionsTarget) {
+                actionsTarget.dataset.actionsKey = actionsKey;
                 actionsEl.innerHTML = `
-                  <button class="btn btn-primary btn-block" id="btn-driver-arrival" ${arrival.eligible ? "" : "disabled"}>
-                    ⚑ Đã đến điểm lấy hàng
-                  </button>
-                  <button class="btn btn-danger btn-sm btn-block" id="btn-driver-cancel">
-                    ✕ Hủy nhận chuyến
+                  <button class="btn btn-primary btn-block btn-finish-trip" id="btn-driver-finish">
+                    ✓ Hoàn tất &amp; Sẵn sàng nhận chuyến mới
                   </button>
                 `;
               }
-            } else if (phase === "AT_PICKUP") {
-              if (topIconEl) { topIconEl.textContent = "📦 A"; topIconEl.className = "nav-target-icon"; }
-              if (topNameEl) topNameEl.textContent = "Tại điểm lấy (A)";
-              if (badgeEl) { badgeEl.className = "status-badge badge-warning"; badgeEl.textContent = "Đã đến điểm A"; }
-              if (targetTitleEl) targetTitleEl.textContent = "Xác nhận nhận kiện hàng";
-              if (noteEl) noteEl.textContent = "Kiểm tra hàng hóa từ người gửi và xác nhận.";
-              if (actionsTarget) {
-                actionsEl.innerHTML = `
-                  <button class="btn btn-primary btn-block" id="btn-driver-pickup">
-                    📦 Xác nhận đã lấy hàng
-                  </button>
-                  <button class="btn btn-danger btn-sm btn-block" id="btn-driver-cancel">
-                    ✕ Hủy nhận chuyến
-                  </button>
-                `;
+            } else {
+              // Khi chuyến đi ĐANG DI CHUYỂN
+              const simBar = target.querySelector("#trip-sim-quick-bar");
+              if (simBar) simBar.style.display = isMockGpsEnabled() ? "flex" : "none";
+              const subHeader = target.querySelector("#sheet-sub-header");
+              if (subHeader) subHeader.style.display = "flex";
+              const metricsEl = target.querySelector("#sheet-metrics");
+              if (metricsEl) metricsEl.style.display = "grid";
+              const completedCard = target.querySelector("#sheet-completed-card");
+              if (completedCard) completedCard.style.display = "none";
+              const recenterBtn = target.querySelector("#btn-driver-recenter");
+              if (recenterBtn) recenterBtn.style.display = "flex";
+
+              const distM = arrival.distanceM;
+              const distStr = distM != null ? (distM >= 1000 ? `${(distM / 1000).toFixed(1)} km` : `${Math.round(distM)} m`) : "đang tính...";
+              if (distanceEl) distanceEl.textContent = distStr;
+              const etaText = arrival.eligible ? "Đã đến nơi" : "Đang di chuyển";
+              if (etaEl) etaEl.textContent = etaText;
+              const peekEl = target.querySelector("#sheet-peek-info");
+              if (peekEl) {
+                peekEl.textContent = `${distStr} • ${etaText}`;
               }
-            } else if (phase === "TO_DROPOFF") {
-              if (topIconEl) { topIconEl.textContent = "🏁 B"; topIconEl.className = "nav-target-icon target-b"; }
-              if (topNameEl) topNameEl.textContent = "Điểm giao hàng (B)";
-              if (badgeEl) { badgeEl.className = "status-badge badge-blue"; badgeEl.textContent = "Chặng 2: Giao hàng"; }
-              if (targetTitleEl) targetTitleEl.textContent = "Đến điểm giao hàng (Điểm B)";
-              if (noteEl) noteEl.textContent = arrival.eligible ? "✓ Đã trong phạm vi <100m. Hãy xác nhận đến." : `Cách điểm giao ~${distStr}.`;
-              if (actionsTarget) {
-                actionsEl.innerHTML = `
-                  <button class="btn btn-primary btn-block" id="btn-driver-arrival" ${arrival.eligible ? "" : "disabled"}>
-                    ⚑ Đã đến điểm giao hàng
-                  </button>
-                  <button class="btn btn-danger btn-sm btn-block" id="btn-driver-failed">
-                    ✕ Hủy / Báo giao thất bại
-                  </button>
-                `;
+
+              if (topDistEl) {
+                topDistEl.textContent = `${distStr} • ${arrival.eligible ? "Đã đến" : "Di chuyển"}`;
               }
-            } else if (phase === "AT_DROPOFF") {
-              if (topIconEl) { topIconEl.textContent = "🤝 B"; topIconEl.className = "nav-target-icon target-b"; }
-              if (topNameEl) topNameEl.textContent = "Tại điểm giao (B)";
-              if (badgeEl) { badgeEl.className = "status-badge badge-warning"; badgeEl.textContent = "Đã đến điểm B"; }
-              if (targetTitleEl) targetTitleEl.textContent = "Bàn giao cho người nhận";
-              if (noteEl) noteEl.textContent = "Bàn giao kiện hàng và xác nhận hoàn tất.";
-              if (actionsTarget) {
-                actionsEl.innerHTML = `
-                  <button class="btn btn-success btn-block" id="btn-driver-deliver">
-                    ✓ Xác nhận giao thành công
-                  </button>
-                  <button class="btn btn-danger btn-sm btn-block" id="btn-driver-failed">
-                    ✕ Hủy / Báo giao thất bại
-                  </button>
-                `;
+
+              const coordsEl = target.querySelector("#sheet-coords");
+              const curLoc = activeDriverTripController?.currentLocation;
+              if (coordsEl && curLoc && Number.isFinite(curLoc.lat) && Number.isFinite(curLoc.lng)) {
+                coordsEl.textContent = `${curLoc.lat.toFixed(5)}, ${curLoc.lng.toFixed(5)}`;
               }
-            } else if (phase === "COMPLETE") {
-              if (topIconEl) { topIconEl.textContent = "🎉"; topIconEl.className = "nav-target-icon target-b"; }
-              if (topNameEl) topNameEl.textContent = "Hoàn tất chuyến đi";
-              if (badgeEl) { badgeEl.className = "status-badge badge-success"; badgeEl.textContent = "Hoàn tất"; }
-              if (targetTitleEl) targetTitleEl.textContent = "Chuyến đi đã hoàn tất";
-              if (noteEl) noteEl.textContent = "Cảm ơn bạn đã hoàn thành chuyến giao này!";
-              if (actionsTarget) {
-                actionsEl.innerHTML = `<button class="btn btn-outline btn-block" id="btn-driver-finish">✓ Đóng hành trình</button>`;
+
+              // Tự động mở rộng thanh điều khiển khi xe đã vào bán kính < 100m để tài xế dễ dàng thao tác
+              if (arrival.eligible && typeof isSheetExpanded !== "undefined" && !isSheetExpanded) {
+                setSheetExpanded(true);
+              }
+
+              // Chỉ dựng lại nút thao tác khi chặng hoặc trạng thái "đã đến" thay đổi
+              const actionsKey = `${phase}|${arrival.eligible ? 1 : 0}`;
+              const actionsTarget = actionsEl && actionsEl.dataset.actionsKey !== actionsKey ? actionsEl : null;
+              if (actionsTarget) actionsTarget.dataset.actionsKey = actionsKey;
+
+              if (phase === "TO_PICKUP") {
+                if (topIconEl) { topIconEl.textContent = "📍 A"; topIconEl.className = "nav-target-icon"; }
+                if (topNameEl) topNameEl.textContent = "Điểm lấy hàng (A)";
+                if (badgeEl) { badgeEl.className = "status-badge badge-blue"; badgeEl.textContent = "Chặng 1: Điểm lấy hàng"; }
+                if (targetTitleEl) targetTitleEl.textContent = "Đến điểm lấy hàng (Điểm A)";
+                if (noteEl) noteEl.textContent = arrival.eligible ? "✓ Đã trong phạm vi <100m. Hãy xác nhận đến." : `Cách điểm lấy ~${distStr}.`;
+                if (actionsTarget) {
+                  actionsEl.innerHTML = `
+                    <button class="btn btn-primary btn-block" id="btn-driver-arrival" ${arrival.eligible ? "" : "disabled"}>
+                      ⚑ Đã đến điểm lấy hàng
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-block" id="btn-driver-cancel">
+                      ✕ Hủy nhận chuyến
+                    </button>
+                  `;
+                }
+              } else if (phase === "AT_PICKUP") {
+                if (topIconEl) { topIconEl.textContent = "📦 A"; topIconEl.className = "nav-target-icon"; }
+                if (topNameEl) topNameEl.textContent = "Tại điểm lấy (A)";
+                if (badgeEl) { badgeEl.className = "status-badge badge-warning"; badgeEl.textContent = "Đã đến điểm A"; }
+                if (targetTitleEl) targetTitleEl.textContent = "Xác nhận nhận kiện hàng";
+                if (noteEl) noteEl.textContent = "Kiểm tra hàng hóa từ người gửi và xác nhận.";
+                if (actionsTarget) {
+                  actionsEl.innerHTML = `
+                    <button class="btn btn-primary btn-block" id="btn-driver-pickup">
+                      📦 Xác nhận đã lấy hàng
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-block" id="btn-driver-cancel">
+                      ✕ Hủy nhận chuyến
+                    </button>
+                  `;
+                }
+              } else if (phase === "TO_DROPOFF") {
+                if (topIconEl) { topIconEl.textContent = "🏁 B"; topIconEl.className = "nav-target-icon target-b"; }
+                if (topNameEl) topNameEl.textContent = "Điểm giao hàng (B)";
+                if (badgeEl) { badgeEl.className = "status-badge badge-blue"; badgeEl.textContent = "Chặng 2: Giao hàng"; }
+                if (targetTitleEl) targetTitleEl.textContent = "Đến điểm giao hàng (Điểm B)";
+                if (noteEl) noteEl.textContent = arrival.eligible ? "✓ Đã trong phạm vi <100m. Hãy xác nhận đến." : `Cách điểm giao ~${distStr}.`;
+                if (actionsTarget) {
+                  actionsEl.innerHTML = `
+                    <button class="btn btn-primary btn-block" id="btn-driver-arrival" ${arrival.eligible ? "" : "disabled"}>
+                      ⚑ Đã đến điểm giao hàng
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-block" id="btn-driver-failed">
+                      ✕ Hủy / Báo giao thất bại
+                    </button>
+                  `;
+                }
+              } else if (phase === "AT_DROPOFF") {
+                if (topIconEl) { topIconEl.textContent = "🤝 B"; topIconEl.className = "nav-target-icon target-b"; }
+                if (topNameEl) topNameEl.textContent = "Tại điểm giao (B)";
+                if (badgeEl) { badgeEl.className = "status-badge badge-warning"; badgeEl.textContent = "Đã đến điểm B"; }
+                if (targetTitleEl) targetTitleEl.textContent = "Bàn giao cho người nhận";
+                if (noteEl) noteEl.textContent = "Bàn giao kiện hàng và xác nhận hoàn tất.";
+                if (actionsTarget) {
+                  actionsEl.innerHTML = `
+                    <button class="btn btn-success btn-block" id="btn-driver-deliver">
+                      ✓ Xác nhận giao thành công
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-block" id="btn-driver-failed">
+                      ✕ Hủy / Báo giao thất bại
+                    </button>
+                  `;
+                }
               }
             }
 
@@ -2503,6 +2608,7 @@
                 activeDriverTripController = null;
               }
               target.classList.remove("driver-cockpit-view-active");
+              showToast("🎉 Chuyến đi đã đóng thành công! Sẵn sàng nhận đơn mới.", "success");
               await renderTasks(target);
             });
           };
