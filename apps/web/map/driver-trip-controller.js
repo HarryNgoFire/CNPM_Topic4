@@ -101,6 +101,22 @@ export class DriverTripController {
     });
     await this.engine.ready();
 
+    if (this.engine) {
+      this.engine._onAutoFollowChange = (active) => {
+        if (typeof document !== "undefined") {
+          const btn = document.getElementById("btn-driver-recenter");
+          if (btn) {
+            btn.classList.toggle("following", Boolean(active));
+          }
+        }
+        if (this.onStateChanged) {
+          try {
+            this.onStateChanged({ type: "AUTO_FOLLOW_CHANGED", autoFollow: Boolean(active) });
+          } catch {}
+        }
+      };
+    }
+
     if (this.engine?.map) {
       setTimeout(() => {
         try { this.engine.map.resize(); } catch {}
@@ -527,6 +543,39 @@ export class DriverTripController {
     }
     this.clearSavedMockLocation();
     this.stopTracking();
+  }
+
+  recenter(opts = {}) {
+    if (this.engine && typeof this.engine.recenterOnDriver === "function") {
+      this.engine.recenterOnDriver(opts);
+    }
+  }
+
+  isAutoFollowActive() {
+    return Boolean(this.engine?.autoFollow);
+  }
+
+  isAutoRecenterEnabled() {
+    if (this.engine && typeof this.engine.isAutoRecenterConfigured === "function") {
+      return this.engine.isAutoRecenterConfigured();
+    }
+    try {
+      if (typeof localStorage !== "undefined") {
+        return localStorage.getItem("moveflow_auto_recenter_enabled") !== "0";
+      }
+    } catch {}
+    return true;
+  }
+
+  setAutoRecenterEnabled(enabled) {
+    if (this.engine) {
+      this.engine.autoRecenterEnabled = Boolean(enabled);
+    }
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("moveflow_auto_recenter_enabled", enabled ? "1" : "0");
+      }
+    } catch {}
   }
 
   destroy() {

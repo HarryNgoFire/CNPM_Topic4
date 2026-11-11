@@ -333,6 +333,10 @@
             <span>🛠️ Demo Tools</span>
             <input type="checkbox" id="vsp-toggle-demo-tools" ${isDemo ? "checked" : ""}>
           </label>
+          <label class="vsp-item">
+            <span>🎯 Auto Recenter 5s</span>
+            <input type="checkbox" id="vsp-toggle-auto-recenter" ${localStorage.getItem("moveflow_auto_recenter_enabled") !== "0" ? "checked" : ""}>
+          </label>
           <div class="vsp-divider"></div>
           <button type="button" class="vsp-action-btn" id="vsp-btn-hide-switcher">
             Ẩn thanh góc này
@@ -400,6 +404,10 @@
       localStorage.setItem("moveflow_demo_tools_enabled", isEnabled ? "1" : "0");
       window.MoveFlowDemo?.updateVisibility();
       showToast(isEnabled ? "Đã bật thanh Demo Tools!" : "Đã tắt thanh Demo Tools.");
+    });
+
+    switcher.querySelector("#vsp-toggle-auto-recenter")?.addEventListener("change", e => {
+      window.MoveFlowDemo?.setAutoRecenterEnabled?.(e.target.checked);
     });
 
     switcher.querySelector("#vsp-btn-hide-switcher")?.addEventListener("click", () => {
@@ -2074,6 +2082,11 @@
           <!-- Bản đồ chiếm toàn bộ không gian trung tâm (80% màn hình) -->
           <div id="driver-trip-map" class="driver-cockpit-map"></div>
 
+          <!-- Nút Căn giữa xe & Bám theo lộ trình (Recenter Floating Button) -->
+          <button type="button" class="recenter-btn following" id="btn-driver-recenter" data-action="recenter-driver-map" title="Căn giữa xe & Bám theo lộ trình" style="bottom: 84px; right: 14px;">
+            ${ICONS.locate}
+          </button>
+
           <!-- Bottom Sheet (Kéo / Mở rộng chuẩn app) -->
           <div class="nav-bottom-sheet collapsed" id="driver-bottom-sheet">
             <button type="button" class="sheet-handle-wrap" id="sheet-handle-trigger" aria-label="Mở rộng chi tiết chuyến đi" aria-expanded="false" aria-controls="sheet-expanded-body">
@@ -3634,6 +3647,11 @@
         await renderView();
       } else if (action === "driver-status") {
         confirmDriverStatusChange(button.dataset.status === "AVAILABLE");
+      } else if (action === "recenter-driver-map") {
+        if (activeDriverTripController) {
+          activeDriverTripController.recenter({ smooth: true });
+          showToast("Đã căn giữa vị trí xe tài xế!", "info");
+        }
       } else if (action === "update-driver-location") {
         if (isMockGpsEnabled()) {
           showToast("🛰️ Đang bật chế độ Mock GPS trong Demo Tools! Hãy tắt Mock GPS nếu muốn lấy vị trí thật từ trình duyệt.", "warning");
@@ -3740,6 +3758,8 @@
     },
     isMockGpsEnabled,
     setMockGpsEnabled: enabled => window.MoveFlowDemo?.setMockGpsEnabled?.(enabled),
+    isAutoRecenterEnabled: () => localStorage.getItem("moveflow_auto_recenter_enabled") !== "0",
+    setAutoRecenterEnabled: enabled => window.MoveFlowDemo?.setAutoRecenterEnabled?.(enabled),
     setTheme,
     toggleTheme,
     getTheme: () => state.theme

@@ -38,6 +38,9 @@ function emptyFeatureCollection() {
 }
 
 function createMarkerElement(label, color) {
+  if (typeof document === "undefined") {
+    return { style: {}, querySelector: () => null };
+  }
   const el = document.createElement("div");
   el.className = `moveflow-marker moveflow-marker-${label.toLowerCase()}`;
   el.style.width = "30px";
@@ -58,6 +61,9 @@ function createMarkerElement(label, color) {
 }
 
 function createDriverMarkerElement() {
+  if (typeof document === "undefined") {
+    return { style: {}, querySelector: () => null };
+  }
   const el = document.createElement("div");
   el.className = "moveflow-marker moveflow-marker-driver";
   el.style.width = "40px";
@@ -104,7 +110,8 @@ export class MapEngine {
     }
 
     const maplibregl =
-      window.maplibregl || (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
+      (typeof window !== "undefined" ? window.maplibregl : null) ||
+      (typeof globalThis !== "undefined" ? globalThis.maplibregl : null);
 
     if (!maplibregl) {
       throw new Error("MapLibre GL JS library not found on page");
@@ -125,6 +132,15 @@ export class MapEngine {
     this.markerA = null;
     this.markerB = null;
     this.markerDriver = null;
+
+    this.autoFollow = true;
+    this.autoRecenterEnabled = true;
+    this.autoRecenterTimeoutMs = 5000;
+    this.targetNavigationZoom = 16.2;
+    this._recenterTimer = null;
+    this._isUserInteracting = false;
+    this._onAutoFollowChange = null;
+    this._domInteractionCleanups = [];
 
     const style = styleUrl || (typeof window !== "undefined" && window.__MOVEFLOW_MAP_STYLE__) || DEFAULT_STYLE;
 
@@ -169,6 +185,8 @@ export class MapEngine {
       "bottom-right",
     );
     this.map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    this._initInteractionListeners();
 
     let fallbackAttempted = false;
     this._readyPromise = new Promise((resolve, reject) => {
@@ -389,7 +407,7 @@ export class MapEngine {
         }
       }
 
-      if (panTo && this.map && typeof this.map.easeTo === "function") {
+      if (panTo && this.autoFollow && this.map && typeof this.map.easeTo === "function") {
         this.map.easeTo({
           center: [this.driverLocation.lng, this.driverLocation.lat],
           padding: {
@@ -527,7 +545,174 @@ export class MapEngine {
     }
   }
 
+  _initInteractionListeners() {
+    if (!this.map || typeof this.map.on !== "function") return;
+
+    const onStart = (e) => {
+      // Bỏ qua nếu việc di chuyển bản đồ là do lệnh lập trình tự động kích hoạt (không có gesture người dùng)
+      if (e && (e.type === "movestart" || e.type === "zoomstart") && !e.originalEvent) return;
+      this._handleUserInteractionStart();
+    };
+
+    const onEnd = (e) => {
+      if (e && (e.type === "moveend" || e.type === "zoomend") && !e.originalEvent && !this._isUserInteracting) return;
+      this._handleUserInteractionEnd();
+    };
+
+    this.map.on("dragstart", onStart);
+    this.map.on("dragend", onEnd);
+    this.map.on("zoomstart", onStart);
+    this.map.on("zoomend", onEnd);
+    this.map.on("rotatestart", onStart);
+    this.map.on("rotateend", onEnd);
+    this.map.on("pitchstart", onStart);
+    this.map.on("pitchend", onEnd);
+    this.map.on("movestart", onStart);
+    this.map.on("moveend", onEnd);
+
+    if (this.container && typeof this.container.addEventListener === "function") {
+      const handlePointerDown = () => this._handleUserInteractionStart();
+      const handlePointerUp = () => this._handleUserInteractionEnd();
+      const handleWheel = () => {
+        this._handleUserInteractionStart();
+        this._handleUserInteractionEnd();
+      };
+
+      this.container.addEventListener("pointerdown", handlePointerDown, { passive: true });
+      this.container.addEventListener("pointerup", handlePointerUp, { passive: true });
+      this.container.addEventListener("touchstart", handlePointerDown, { passive: true });
+      this.container.addEventListener("touchend", handlePointerUp, { passive: true });
+      this.container.addEventListener("mousedown", handlePointerDown, { passive: true });
+      this.container.addEventListener("mouseup", handlePointerUp, { passive: true });
+      this.container.addEventListener("wheel", handleWheel, { passive: true });
+
+      this._domInteractionCleanups.push(() => {
+        try {
+          this.container.removeEventListener("pointerdown", handlePointerDown);
+          this.container.removeEventListener("pointerup", handlePointerUp);
+          this.container.removeEventListener("touchstart", handlePointerDown);
+          this.container.removeEventListener("touchend", handlePointerUp);
+          this.container.removeEventListener("mousedown", handlePointerDown);
+          this.container.removeEventListener("mouseup", handlePointerUp);
+          this.container.removeEventListener("wheel", handleWheel);
+        } catch {}
+      });
+    }
+  }
+
+  _handleUserInteractionStart() {
+    this._isUserInteracting = true;
+    this.pauseAutoFollow();
+  }
+
+  _handleUserInteractionEnd() {
+    this._isUserInteracting = false;
+    this._scheduleAutoRecenter();
+  }
+
+  pauseAutoFollow() {
+    this._clearRecenterTimer();
+    if (this.autoFollow) {
+      this.autoFollow = false;
+      if (typeof this._onAutoFollowChange === "function") {
+        try { this._onAutoFollowChange(false); } catch {}
+      }
+    }
+  }
+
+  _scheduleAutoRecenter() {
+    this._clearRecenterTimer();
+    if (!this.isAutoRecenterConfigured()) return;
+    if (this.autoFollow) return;
+    if (!this.driverLocation) return;
+
+    this._recenterTimer = setTimeout(() => {
+      this._recenterTimer = null;
+      if (!this.isAutoRecenterConfigured()) return;
+      if (this._isUserInteracting) return;
+      this.recenterOnDriver({ smooth: true });
+    }, this.autoRecenterTimeoutMs);
+  }
+
+  _clearRecenterTimer() {
+    if (this._recenterTimer) {
+      clearTimeout(this._recenterTimer);
+      this._recenterTimer = null;
+    }
+  }
+
+  isAutoRecenterConfigured() {
+    if (this.autoRecenterEnabled === false) return false;
+    try {
+      if (typeof localStorage !== "undefined") {
+        return localStorage.getItem("moveflow_auto_recenter_enabled") !== "0";
+      }
+    } catch {}
+    return true;
+  }
+
+  recenterOnDriver({ smooth = true, duration = 1000, zoom = null } = {}) {
+    this._clearRecenterTimer();
+    if (
+      !this.driverLocation ||
+      typeof this.driverLocation.lat !== "number" ||
+      typeof this.driverLocation.lng !== "number"
+    ) {
+      return;
+    }
+    if (!this.map) return;
+
+    let targetZoom = zoom;
+    if (typeof targetZoom !== "number") {
+      const curZoom = typeof this.map.getZoom === "function" ? this.map.getZoom() : 16;
+      if (curZoom < 14 || curZoom > 18) {
+        targetZoom = this.targetNavigationZoom || 16.2;
+      } else {
+        targetZoom = Math.min(17.2, Math.max(15.2, curZoom));
+      }
+    }
+
+    const padding = {
+      top: this.topPadding || 0,
+      bottom: this.bottomPadding || 0,
+      left: this.leftPadding || 0,
+      right: this.rightPadding || 0,
+    };
+
+    if (smooth && typeof this.map.flyTo === "function") {
+      this.map.flyTo({
+        center: [this.driverLocation.lng, this.driverLocation.lat],
+        zoom: targetZoom,
+        padding,
+        duration,
+        essential: true,
+      });
+    } else if (typeof this.map.easeTo === "function") {
+      this.map.easeTo({
+        center: [this.driverLocation.lng, this.driverLocation.lat],
+        zoom: targetZoom,
+        padding,
+        duration,
+      });
+    } else if (typeof this.map.setCenter === "function") {
+      this.map.setCenter([this.driverLocation.lng, this.driverLocation.lat]);
+      if (typeof this.map.setZoom === "function") {
+        this.map.setZoom(targetZoom);
+      }
+    }
+
+    this.autoFollow = true;
+    if (typeof this._onAutoFollowChange === "function") {
+      try { this._onAutoFollowChange(true); } catch {}
+    }
+  }
+
   destroy() {
+    this._clearRecenterTimer();
+    if (this._domInteractionCleanups) {
+      this._domInteractionCleanups.forEach(fn => { try { fn(); } catch {} });
+      this._domInteractionCleanups = [];
+    }
     if (this._resizeObserver) {
       try { this._resizeObserver.disconnect(); } catch {}
       this._resizeObserver = null;

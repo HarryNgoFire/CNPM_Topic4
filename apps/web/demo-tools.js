@@ -206,6 +206,55 @@
     return localStorage.getItem("moveflow_demo_tools_enabled") !== "0";
   }
 
+  function isAutoRecenterEnabled() {
+    return localStorage.getItem("moveflow_auto_recenter_enabled") !== "0";
+  }
+
+  function setAutoRecenterEnabled(enabled, silent = false) {
+    const flag = Boolean(enabled);
+    localStorage.setItem("moveflow_auto_recenter_enabled", flag ? "1" : "0");
+
+    document.querySelectorAll(".demo-auto-recenter-checkbox").forEach(cb => {
+      cb.checked = flag;
+    });
+    document.querySelectorAll(".demo-auto-recenter-badge").forEach(b => {
+      b.textContent = flag ? "ĐANG BẬT (Tự bám xe sau 5s)" : "ĐÃ TẮT (Không tự bám xe)";
+      b.style.color = flag ? "var(--blue)" : "var(--text-secondary)";
+    });
+
+    const vspCb = document.getElementById("vsp-toggle-auto-recenter");
+    if (vspCb) vspCb.checked = flag;
+
+    const mf = getMf();
+    const activeTrip = mf?.getActiveDriverTripController?.();
+    if (activeTrip?.engine) {
+      activeTrip.engine.autoRecenterEnabled = flag;
+      if (flag) {
+        activeTrip.engine._scheduleAutoRecenter?.();
+      } else {
+        activeTrip.engine._clearRecenterTimer?.();
+      }
+    }
+    const activeDetail = mf?.getActiveDetailMapEngine?.();
+    if (activeDetail) {
+      activeDetail.autoRecenterEnabled = flag;
+      if (flag) {
+        activeDetail._scheduleAutoRecenter?.();
+      } else {
+        activeDetail._clearRecenterTimer?.();
+      }
+    }
+
+    if (!silent) {
+      mf?.showToast?.(
+        flag
+          ? "🎯 Đã BẬT Auto Recenter: Sau 5s không chạm bản đồ sẽ tự căn giữa xe."
+          : "⏸️ Đã TẮT Auto Recenter: Bản đồ sẽ không tự động căn giữa xe.",
+        "info"
+      );
+    }
+  }
+
   function isMockGpsEnabled() {
     return localStorage.getItem("moveflow_mock_gps_enabled") === "1";
   }
@@ -483,6 +532,7 @@
     const currentEmail = currentUser?.email || "";
 
     const mockOn = isMockGpsEnabled();
+    const autoRecenterOn = isAutoRecenterEnabled();
     const currentSpeedKmh = getSimSpeedKmh();
     const speedPresets = [
       { kmh: 30, label: "🐢 30 km/h" },
@@ -527,6 +577,24 @@
         </div>
         <label class="switch" title="Bật/tắt chế độ Mock GPS">
           <input type="checkbox" class="demo-mock-gps-checkbox" ${mockOn ? "checked" : ""}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <div class="demo-auto-recenter-box" style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-alt);display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+            <span>🎯 Tự động căn giữa sau 5s (Auto Recenter)</span>
+          </div>
+          <div class="demo-auto-recenter-badge" style="font-size:11px;font-weight:600;margin-top:2px;color:${autoRecenterOn ? "var(--blue)" : "var(--text-secondary)"}">
+            ${autoRecenterOn ? "ĐANG BẬT (Tự bám xe sau 5s)" : "ĐÃ TẮT (Không tự bám xe)"}
+          </div>
+          <div style="font-size:10.5px;color:var(--text-secondary);margin-top:2px">
+            Sau 5 giây không chạm bản đồ, camera sẽ tự bay về xe với góc nhìn mượt. Khi chạm bản đồ, tạm dừng bám xe.
+          </div>
+        </div>
+        <label class="switch" title="Bật/tắt tự động căn giữa sau 5 giây">
+          <input type="checkbox" class="demo-auto-recenter-checkbox" ${autoRecenterOn ? "checked" : ""}>
           <span class="switch-slider"></span>
         </label>
       </div>
@@ -729,6 +797,13 @@
     host.querySelectorAll(".demo-mock-gps-checkbox").forEach(cb => {
       cb.addEventListener("change", e => {
         setMockGpsEnabled(e.target.checked);
+      });
+    });
+
+    // Auto Recenter Toggle Switch
+    host.querySelectorAll(".demo-auto-recenter-checkbox").forEach(cb => {
+      cb.addEventListener("change", e => {
+        setAutoRecenterEnabled(e.target.checked);
       });
     });
 
@@ -1715,6 +1790,8 @@
     updateVisibility: createDom,
     isMockGpsEnabled,
     setMockGpsEnabled,
+    isAutoRecenterEnabled,
+    setAutoRecenterEnabled,
     getSimSpeedKmh,
     setSimSpeedKmh,
     fetchMockOsrmRoute,
