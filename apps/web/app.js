@@ -283,10 +283,8 @@
     let switcher = document.getElementById("viewport-mode-switcher");
     if (!isSwitcherEnabled) {
       if (switcher) switcher.style.display = "none";
-      document.body.classList.remove("has-viewport-switcher");
       return;
     }
-    document.body.classList.add("has-viewport-switcher");
     if (!switcher) {
       switcher = document.createElement("aside");
       switcher.id = "viewport-mode-switcher";
@@ -300,6 +298,13 @@
     const isDark = state.theme === "dark";
 
     switcher.innerHTML = `
+      <span class="switcher-drag-handle" title="Giữ và kéo thả đến bất kỳ vị trí nào">
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/>
+          <circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/>
+          <circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/>
+        </svg>
+      </span>
       <button class="switcher-btn ${state.deviceMode === 'mobile' ? 'active' : ''}" data-mode="mobile" title="Chế độ điện thoại dọc 390x844">
         <span class="switcher-icon">📱</span> Mobile
       </button>
@@ -315,7 +320,7 @@
 
       <div class="viewport-settings-popover" id="viewport-settings-popover">
         <div class="vsp-header">
-          <span>⚙️ Cài đặt góc nhanh</span>
+          <span>⚙️ Cài đặt nhanh</span>
           <button type="button" class="vsp-close" id="btn-vsp-close" title="Đóng">✕</button>
         </div>
         <div class="vsp-body">
@@ -341,12 +346,147 @@
           </label>
           <div class="vsp-divider"></div>
           <button type="button" class="vsp-action-btn" id="vsp-btn-hide-switcher">
-            Ẩn thanh góc này
+            Ẩn thanh nổi này
           </button>
           <div class="vsp-hint">Bật lại trong Cài đặt Admin</div>
         </div>
       </div>
     `;
+
+    const applySavedSwitcherPos = () => {
+      try {
+        const raw = localStorage.getItem("moveflow_switcher_pos");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.left === "number" && typeof parsed.top === "number") {
+            const rect = switcher.getBoundingClientRect();
+            const maxL = Math.max(8, window.innerWidth - (rect.width || 240) - 8);
+            const maxT = Math.max(8, window.innerHeight - (rect.height || 44) - 8);
+            switcher.style.left = `${Math.max(8, Math.min(maxL, parsed.left))}px`;
+            switcher.style.top = `${Math.max(8, Math.min(maxT, parsed.top))}px`;
+            switcher.style.bottom = "auto";
+            switcher.style.right = "auto";
+            return;
+          }
+        }
+      } catch {}
+      switcher.style.bottom = "18px";
+      switcher.style.left = "18px";
+      switcher.style.top = "auto";
+      switcher.style.right = "auto";
+    };
+    requestAnimationFrame(applySavedSwitcherPos);
+
+    const updatePopoverPlacement = () => {
+      const p = switcher.querySelector("#viewport-settings-popover");
+      if (!p) return;
+      const rect = switcher.getBoundingClientRect();
+      if (rect.top > window.innerHeight / 2) {
+        p.style.top = "auto";
+        p.style.bottom = "calc(100% + 10px)";
+      } else {
+        p.style.top = "calc(100% + 10px)";
+        p.style.bottom = "auto";
+      }
+      if (rect.left + rect.width / 2 > window.innerWidth / 2) {
+        p.style.right = "0";
+        p.style.left = "auto";
+      } else {
+        p.style.left = "0";
+        p.style.right = "auto";
+      }
+    };
+
+    if (!switcher._dragBound) {
+      let dragging = false;
+      let hasMoved = false;
+      let startX = 0;
+      let startY = 0;
+      let offsetX = 0;
+      let offsetY = 0;
+      let rectW = 240;
+      let rectH = 44;
+
+      switcher.addEventListener("pointerdown", e => {
+        if (e.target.closest("#viewport-settings-popover")) return;
+        if (e.button !== 0 && e.pointerType === "mouse") return;
+        const rect = switcher.getBoundingClientRect();
+        dragging = true;
+        hasMoved = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        rectW = rect.width || 240;
+        rectH = rect.height || 44;
+      });
+
+      window.addEventListener("pointermove", e => {
+        if (!dragging) return;
+        const dx = Math.abs(e.clientX - startX);
+        const dy = Math.abs(e.clientY - startY);
+        if (!hasMoved && (dx > 4 || dy > 4)) {
+          hasMoved = true;
+          switcher.classList.add("dragging");
+        }
+        if (hasMoved) {
+          const maxL = Math.max(8, window.innerWidth - rectW - 8);
+          const maxT = Math.max(8, window.innerHeight - rectH - 8);
+          const newLeft = Math.max(8, Math.min(maxL, e.clientX - offsetX));
+          const newTop = Math.max(8, Math.min(maxT, e.clientY - offsetY));
+          switcher.style.left = `${newLeft}px`;
+          switcher.style.top = `${newTop}px`;
+          switcher.style.bottom = "auto";
+          switcher.style.right = "auto";
+          const p = document.getElementById("viewport-settings-popover");
+          if (p && p.classList.contains("open")) {
+            updatePopoverPlacement();
+          }
+        }
+      });
+
+      const endDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        switcher.classList.remove("dragging");
+        if (hasMoved) {
+          switcher._justDragged = true;
+          setTimeout(() => {
+            switcher._justDragged = false;
+          }, 120);
+          const rect = switcher.getBoundingClientRect();
+          try {
+            localStorage.setItem("moveflow_switcher_pos", JSON.stringify({
+              left: Math.round(rect.left),
+              top: Math.round(rect.top),
+            }));
+          } catch {}
+        }
+      };
+
+      window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", endDrag);
+      window.addEventListener("resize", () => {
+        const raw = localStorage.getItem("moveflow_switcher_pos");
+        if (!raw) return;
+        const rect = switcher.getBoundingClientRect();
+        const maxL = Math.max(8, window.innerWidth - (rect.width || 240) - 8);
+        const maxT = Math.max(8, window.innerHeight - (rect.height || 44) - 8);
+        if (rect.left > maxL || rect.top > maxT) {
+          switcher.style.left = `${Math.max(8, Math.min(maxL, rect.left))}px`;
+          switcher.style.top = `${Math.max(8, Math.min(maxT, rect.top))}px`;
+        }
+      });
+
+      switcher.addEventListener("click", e => {
+        if (switcher._justDragged) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
+
+      switcher._dragBound = true;
+    }
 
     switcher.querySelectorAll(".switcher-btn").forEach(btn => {
       btn.onclick = () => setDeviceMode(btn.dataset.mode);
@@ -362,6 +502,7 @@
 
     settingsBtn?.addEventListener("click", e => {
       e.stopPropagation();
+      updatePopoverPlacement();
       popover?.classList.toggle("open");
     });
 

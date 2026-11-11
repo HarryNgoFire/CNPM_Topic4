@@ -428,27 +428,57 @@ a {
 }
 
 /* ==========================================================================
-   VIEWPORT SWITCHER (Fixed Top-Left Pill)
+   VIEWPORT SWITCHER (Draggable Floating Popup Pill)
    ========================================================================== */
 .viewport-switcher {
   position: fixed;
-  top: 14px;
-  left: 14px;
+  bottom: 18px;
+  left: 18px;
   z-index: 10000;
   display: flex;
   align-items: center;
   background: rgba(16, 36, 58, 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  padding: 4px;
+  padding: 4px 6px;
   border-radius: var(--radius-full);
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  transition: all 0.25s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  touch-action: none;
+  user-select: none;
 }
 
 .viewport-switcher:hover {
-  border-color: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.viewport-switcher.dragging {
+  cursor: grabbing !important;
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+  opacity: 0.96;
+}
+
+.switcher-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px 4px 4px;
+  margin-right: 2px;
+  color: #64748b;
+  cursor: grab;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  transition: color 0.15s ease;
+}
+
+.switcher-drag-handle:hover,
+.viewport-switcher.dragging .switcher-drag-handle {
+  color: #e2e8f0;
+}
+
+.viewport-switcher.dragging .switcher-drag-handle {
+  cursor: grabbing;
 }
 
 .switcher-btn {
@@ -838,10 +868,6 @@ a {
   top: 0;
   z-index: 800;
   box-shadow: 0 2px 8px rgba(16, 36, 58, 0.03);
-}
-
-body.has-viewport-switcher .desktop-top-nav {
-  padding-left: 265px; /* Offset for top-left viewport switcher when visible */
 }
 
 .desktop-brand-meta {
@@ -2107,9 +2133,6 @@ body.mode-desktop .nav-bottom-sheet {
     flex-wrap: wrap !important;
     gap: 10px !important;
   }
-  body.has-viewport-switcher .desktop-top-nav {
-    padding-left: 255px !important;
-  }
   .desktop-two-col, .desktop-two-col-map {
     grid-template-columns: 1fr !important;
   }
@@ -2159,10 +2182,6 @@ body.mode-desktop .nav-bottom-sheet {
     height: auto !important;
     min-height: 64px !important;
   }
-  body.has-viewport-switcher .desktop-top-nav {
-    padding-top: 62px !important;
-    padding-left: 14px !important;
-  }
   .desktop-brand-logo {
     height: 32px !important;
   }
@@ -2176,10 +2195,6 @@ body.mode-desktop .nav-bottom-sheet {
     padding: 12px 12px 10px !important;
     flex-wrap: wrap !important;
     gap: 8px !important;
-  }
-  body.has-viewport-switcher .desktop-top-nav {
-    padding-top: 62px !important;
-    padding-left: 12px !important;
   }
   .desktop-nav-links {
     order: 3 !important;
