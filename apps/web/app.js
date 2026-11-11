@@ -283,8 +283,10 @@
     let switcher = document.getElementById("viewport-mode-switcher");
     if (!isSwitcherEnabled) {
       if (switcher) switcher.style.display = "none";
+      document.body.classList.remove("has-viewport-switcher");
       return;
     }
+    document.body.classList.add("has-viewport-switcher");
     if (!switcher) {
       switcher = document.createElement("aside");
       switcher.id = "viewport-mode-switcher";
