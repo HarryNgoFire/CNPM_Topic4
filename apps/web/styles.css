@@ -3392,10 +3392,10 @@ body.theme-dark .demo-action-btn.active-account {
 .mobile-sidebar-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 290;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 1500;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -3414,10 +3414,10 @@ body.theme-dark .demo-action-btn.active-account {
   width: 296px;
   max-width: 82%;
   background: var(--surface);
-  z-index: 300;
+  z-index: 1600;
   display: flex;
   flex-direction: column;
-  box-shadow: 6px 0 24px rgba(15, 23, 42, 0.25);
+  box-shadow: 8px 0 32px rgba(15, 23, 42, 0.35);
   transform: translateX(-100%);
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
@@ -3428,7 +3428,8 @@ body.theme-dark .demo-action-btn.active-account {
 }
 
 .mobile-sidebar-header {
-  padding: 16px 16px 12px;
+  padding: 50px 16px 12px;
+  padding-top: max(50px, env(safe-area-inset-top, 50px));
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
@@ -3556,7 +3557,8 @@ body.theme-dark .mobile-sidebar-nav-item.active {
 }
 
 .mobile-sidebar-footer {
-  padding: 12px 14px 16px;
+  padding: 12px 14px 20px;
+  padding-bottom: max(22px, env(safe-area-inset-bottom, 22px));
   border-top: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
