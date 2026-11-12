@@ -55,15 +55,26 @@ describe("Pricing API service", () => {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   db.$transaction = (fn: any) => fn(db);
-  const routing = { getDistance: jest.fn() };
+  const routing = { getRoute: jest.fn() };
   const service = new PricingService(db as PrismaService, routing as any);
   beforeEach(() => {
     jest.clearAllMocks();
-    routing.getDistance.mockResolvedValue({
+    routing.getRoute.mockResolvedValue({
+      distanceMeters: 8400,
       distanceKm: 8.4,
-      distanceSource: "OSRM_DRIVING",
+      durationSeconds: 504,
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [106, 10],
+          [106, 11],
+        ],
+      },
+      source: "OSRM",
+      profile: "driving",
     });
   });
   it("uses OSRM road distance to calculate the quote", async () => {
@@ -75,13 +86,35 @@ describe("Pricing API service", () => {
       serviceType: "EXPRESS",
     } as any);
     expect(quote.fee).toBe(75300);
+    expect(quote.distanceKm).toBe(8.4);
+    expect(quote.distanceMeters).toBe(8400);
+    expect(quote.durationSeconds).toBe(504);
+    expect(quote.geometry).toEqual({
+      type: "LineString",
+      coordinates: [
+        [106, 10],
+        [106, 11],
+      ],
+    });
+    expect(quote.source).toBe("OSRM");
+    expect(quote.profile).toBe("driving");
     expect(quote.distanceSource).toBe("OSRM_DRIVING");
   });
   it("uses the road route result returned by the routing service", async () => {
     db.pricingRule.findFirst.mockResolvedValue(rule);
-    routing.getDistance.mockResolvedValue({
+    routing.getRoute.mockResolvedValue({
+      distanceMeters: 9250,
       distanceKm: 9.25,
-      distanceSource: "OSRM_DRIVING",
+      durationSeconds: 550,
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [106, 10],
+          [106, 11],
+        ],
+      },
+      source: "OSRM",
+      profile: "driving",
     });
     const quote = await service.quote({
       pickupAddress: { lat: 10, lng: 106 },
@@ -91,12 +124,13 @@ describe("Pricing API service", () => {
     } as any);
     expect(quote.fee).toBe(79125);
     expect(quote.distanceKm).toBe(9.25);
+    expect(quote.distanceMeters).toBe(9250);
     expect(quote.distanceSource).toBe("OSRM_DRIVING");
-    expect(routing.getDistance).toHaveBeenCalled();
+    expect(routing.getRoute).toHaveBeenCalled();
   });
   it("does not create a quote if road routing fails", async () => {
     db.pricingRule.findFirst.mockResolvedValue(rule);
-    routing.getDistance.mockRejectedValue(new Error("OSRM unavailable"));
+    routing.getRoute.mockRejectedValue(new Error("OSRM unavailable"));
     await expect(
       service.quote({
         pickupAddress: { lat: 10, lng: 106 },

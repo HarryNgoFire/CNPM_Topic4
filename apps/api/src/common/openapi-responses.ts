@@ -6,7 +6,17 @@ const date = { type: "string", format: "date-time" };
 const money = { type: "number", minimum: 0 };
 const status = {
   type: "string",
-  enum: ["RECEIVED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"],
+  enum: [
+    "RECEIVED",
+    "EN_ROUTE_PICKUP",
+    "ARRIVED_PICKUP",
+    "OUT_FOR_DELIVERY",
+    "ARRIVED_DROPOFF",
+    "DELIVERED",
+    "IN_TRANSIT",
+    "CANCELLED",
+    "DELIVERY_FAILED",
+  ],
 };
 const object = (
   properties: Record<string, any>,
@@ -25,14 +35,29 @@ export function addResponseContracts(doc: OpenAPIObject) {
       ruleId: uuid,
       ruleVersion: { type: "integer" },
       distanceKm: money,
+      distanceMeters: money,
+      durationSeconds: { type: "integer" },
+      geometry: {
+        type: "object",
+        properties: {
+          type: { type: "string", const: "LineString" },
+          coordinates: {
+            type: "array",
+            items: {
+              type: "array",
+              items: { type: "number" },
+              minItems: 2,
+              maxItems: 2,
+            },
+          },
+        },
+        required: ["type", "coordinates"],
+      },
+      source: { type: "string", const: "OSRM" },
+      profile: { type: "string", const: "driving" },
       distanceSource: {
         type: "string",
-        enum: [
-          "OSRM_DRIVING",
-          "GOOGLE_ROUTES_TWO_WHEELER",
-          "GOOGLE_ROUTES_DRIVE",
-          "POSTGIS_GEODESIC_FALLBACK",
-        ],
+        enum: ["OSRM_DRIVING"],
       },
       baseFee: money,
       distanceFee: money,
@@ -152,14 +177,31 @@ export function addResponseContracts(doc: OpenAPIObject) {
         enum: ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"],
       },
     }),
+    GeocodedAddress: object({
+      label: text,
+      lat: { type: "number", minimum: -90, maximum: 90 },
+      lng: { type: "number", minimum: -180, maximum: 180 },
+      address: object({
+        line: text,
+        ward: text,
+        district: text,
+        city: text,
+      }),
+      attribution: text,
+    }),
   };
-  schemas.AddressResponse = object({
-    id: uuid,
-    line: text,
-    ward: text,
-    district: text,
-    city: text,
-  });
+  schemas.AddressResponse = object(
+    {
+      id: uuid,
+      line: text,
+      ward: text,
+      district: text,
+      city: text,
+      lat: { type: "number", minimum: -90, maximum: 90 },
+      lng: { type: "number", minimum: -180, maximum: 180 },
+    },
+    ["id", "line", "ward", "district", "city"],
+  );
   schemas.ParcelResponse = object({
     id: uuid,
     shipmentId: uuid,
@@ -176,10 +218,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
     changedBy: uuid,
     occurredAt: date,
   });
-  schemas.NavigationUrls = object({
-    pickup: { type: "string", format: "uri" },
-    dropoff: { type: "string", format: "uri" },
-  });
   schemas.ShipmentDetailResponse = {
     allOf: [
       ref("ShipmentResponse"),
@@ -188,9 +226,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
         pickup: ref("AddressResponse"),
         dropoff: ref("AddressResponse"),
         history: array("HistoryResponse"),
-        navigationUrls: {
-          oneOf: [ref("NavigationUrls"), { type: "null" }],
-        },
       }),
     ],
   };
@@ -208,9 +243,6 @@ export function addResponseContracts(doc: OpenAPIObject) {
             }),
           ],
         },
-        navigationUrls: {
-          oneOf: [ref("NavigationUrls"), { type: "null" }],
-        },
       }),
     ],
   };
@@ -220,13 +252,101 @@ export function addResponseContracts(doc: OpenAPIObject) {
       object({ assignments: array("AssignmentResponse") }),
     ],
   };
+  schemas.NavigationResponse = object({
+    shipmentId: uuid,
+    shipmentStatus: status,
+    phase: {
+      type: "string",
+      enum: ["TO_PICKUP", "AT_PICKUP", "TO_DROPOFF", "AT_DROPOFF", "COMPLETE"],
+    },
+    currentLocation: {
+      oneOf: [
+        object({
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          accuracyM: { type: "number", minimum: 0 },
+          capturedAt: date,
+        }),
+        { type: "null" },
+      ],
+    },
+    destination: {
+      oneOf: [
+        object({
+          kind: { type: "string", enum: ["PICKUP", "DROPOFF"] },
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+        }),
+        { type: "null" },
+      ],
+    },
+    route: {
+      oneOf: [
+        object({
+          distanceMeters: money,
+          distanceKm: money,
+          durationSeconds: { type: "integer" },
+          geometry: {
+            type: "object",
+            properties: {
+              type: { type: "string", const: "LineString" },
+              coordinates: {
+                type: "array",
+                items: {
+                  type: "array",
+                  items: { type: "number" },
+                  minItems: 2,
+                  maxItems: 2,
+                },
+              },
+            },
+            required: ["type", "coordinates"],
+          },
+          source: { type: "string", const: "OSRM" },
+          profile: { type: "string", const: "driving" },
+        }),
+        { type: "null" },
+      ],
+    },
+    arrival: object(
+      {
+        eligible: { type: "boolean" },
+        distanceM: { oneOf: [{ type: "number", minimum: 0 }, { type: "null" }] },
+        reason: { type: "string" },
+      },
+      ["eligible", "distanceM"],
+    ),
+    routingError: { oneOf: [{ type: "string" }, { type: "null" }] },
+  });
+  schemas.LiveTrackingResponse = object({
+    shipmentId: uuid,
+    status: status,
+    driver: {
+      oneOf: [
+        object({
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          accuracyM: { type: "number", minimum: 0 },
+          capturedAt: date,
+        }),
+        { type: "null" },
+      ],
+    },
+    lastUpdatedAt: {
+      oneOf: [date, { type: "null" }],
+    },
+  });
   doc.components ??= {};
   doc.components.schemas = { ...doc.components.schemas, ...schemas };
   const contracts: Record<string, any> = {
     "POST /api/v1/pricing/quote": ref("FeeQuoteResponse"),
+    "GET /api/v1/geocoding/search": array("GeocodedAddress"),
+    "GET /api/v1/geocoding/reverse": ref("GeocodedAddress"),
     "POST /api/v1/shipments": ref("ShipmentResponse"),
     "GET /api/v1/shipments": array("ShipmentResponse"),
     "GET /api/v1/shipments/{id}": ref("ShipmentDetailResponse"),
+    "GET /api/v1/shipments/{id}/navigation": ref("NavigationResponse"),
+    "GET /api/v1/shipments/{id}/live": ref("LiveTrackingResponse"),
     "POST /api/v1/shipments/{id}/transition": ref("ShipmentResponse"),
     "GET /api/v1/tracking/{trackingCode}": ref("TrackingResponse"),
     "POST /api/v1/shipments/{id}/assign-driver": {
@@ -236,8 +356,12 @@ export function addResponseContracts(doc: OpenAPIObject) {
     "GET /api/v1/dispatch/queue": array("DispatchQueueResponse"),
     "GET /api/v1/drivers/me/tasks": array("DriverTaskResponse"),
     "PATCH /api/v1/drivers/me/location": object({
+      accepted: { type: "boolean" },
+      reason: { type: "string", enum: ["TOO_SOON", "STATIONARY"] },
       lat: { type: "number", minimum: -90, maximum: 90 },
       lng: { type: "number", minimum: -180, maximum: 180 },
+      capturedAt: date,
+      receivedAt: date,
     }),
     "PATCH /api/v1/drivers/me/status": ref("DriverResponse"),
     "POST /api/v1/webhooks/subscriptions": ref("SubscriptionResponse"),

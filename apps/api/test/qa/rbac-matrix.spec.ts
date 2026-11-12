@@ -29,7 +29,7 @@ const ENDPOINTS: [string, string, Role[]][] = [
   ["post", "/shipments", ["SENDER", "ADMIN"]],
   ["get", "/shipments", ["SENDER", "ADMIN", "DISPATCHER"]],
   ["get", "/shipments/:id", ["SENDER", "ADMIN", "DISPATCHER", "DRIVER"]],
-  ["post", "/shipments/:id/transition", ["DRIVER", "ADMIN"]],
+  ["post", "/shipments/:id/transition", ["DRIVER", "ADMIN", "SENDER"]],
   ["post", "/shipments/:id/assign-driver", ["DISPATCHER", "ADMIN"]],
   ["post", "/assignments/:id/respond", ["DRIVER"]],
   ["get", "/dispatch/queue", ["DISPATCHER", "ADMIN"]],
@@ -79,7 +79,7 @@ describe("QA: RBAC matrix (15 endpoints x anonymous + 4 roles)", () => {
   beforeEach(() => {
     db.user.findUnique.mockImplementation(async ({ where }: any) => {
       const role = ROLES.find((r) => ids[r] === where.id);
-      return role ? { id: where.id, role, active: true } : null;
+      return role ? { id: where.id, role, active: true, emailVerified: true } : null;
     });
   });
 

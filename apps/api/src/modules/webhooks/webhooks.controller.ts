@@ -12,6 +12,9 @@ export class WebhooksController {
   @Post("subscriptions") subscribe(@Body() input: SubscriptionDto) {
     return this.service.subscribe(input);
   }
+  @Get("subscriptions") subscriptions() {
+    return this.service.subscriptions();
+  }
   @Get("events") events(@Query() page: PageDto) {
     return this.service.events(page);
   }

@@ -7,10 +7,10 @@
 ### Khách hàng
 - Đăng ký bằng email cá nhân, xác minh email bằng OTP 6 chữ số rồi mới được đăng nhập.
 - Đăng nhập, đăng xuất, xem hồ sơ, cập nhật tên và đổi mật khẩu.
-- Tạo đơn giao nhận với điểm lấy, điểm giao, tọa độ, khối lượng và dịch vụ tiêu chuẩn/hỏa tốc.
-- Yêu cầu báo phí trước khi tạo đơn; backend sử dụng khoảng cách từ OSRM.
-- Xem danh sách đơn, chi tiết đơn, trạng thái và lịch sử; tra cứu bằng mã vận đơn.
-- Mở Google Maps đến điểm lấy/điểm giao bằng URL, không cần Google Maps API key.
+- Tạo đơn giao nhận với bản đồ trực quan MapLibre GL: tìm kiếm gợi ý địa chỉ tự động, kéo thả ghim A (lấy hàng) và ghim B (giao hàng), tự động điền GPS cho điểm lấy hàng.
+- Báo phí và lộ trình tự động qua OSRM (hiển thị cự ly đường bộ, thời gian di chuyển dự kiến và phí cước chuẩn hóa).
+- Xem danh sách đơn, chi tiết đơn với bản đồ hành trình và theo dõi vị trí tài xế trực tiếp (live tracking) cập nhật mỗi 10 giây.
+- Tra cứu hành trình công khai bằng mã vận đơn an toàn (không để lộ tọa độ tài xế ra ngoài).
 
 ### Quản lý / điều phối
 - Xem tổng quan đơn hàng, đơn cần phân công và trạng thái.
@@ -21,9 +21,12 @@
 
 ### Tài xế
 - Xem công việc được phân công, nhận/từ chối đơn.
-- Cập nhật trạng thái sẵn sàng/ngoại tuyến.
-- Mở Google Maps để đi đến điểm lấy và điểm giao.
-- Cập nhật trạng thái đơn từ đã tiếp nhận → đang vận chuyển → đang giao → đã giao.
+- Cập nhật trạng thái sẵn sàng/ngoại tuyến và cập nhật tọa độ GPS.
+- Dẫn đường tương tác 2 chặng trực tiếp trên ứng dụng (MapLibre GL):
+  - Chặng 1: Dẫn đường từ GPS hiện tại đến điểm lấy hàng A (không lộ điểm giao B).
+  - Chặng 2: Sau khi lấy hàng, mở lộ trình đến điểm giao hàng B.
+- Kiểm soát Geofence 100m: Nút xác nhận đến điểm lấy/điểm giao chỉ sáng khi tài xế nằm trong bán kính 100m.
+- Báo cáo giao hàng thất bại kèm lý do cụ thể khi không thể phát hàng.
 
 ## 2. Yêu cầu
 
@@ -112,7 +115,7 @@ Quãng đường tính phí được lấy từ OSRM dựa trên hai tọa độ
 ### Tài xế
 1. Đăng nhập tài khoản `DRIVER` đã được cấp và xác minh.
 2. Mở **Công việc của tôi**.
-3. Nhận/từ chối đơn; dùng **Đi đến điểm lấy hàng/điểm giao hàng** để mở Google Maps.
+3. Nhận/từ chối đơn; xem lộ trình và điều hướng trực tiếp trên bản đồ tích hợp trong ứng dụng.
 4. Cập nhật trạng thái theo tiến trình thực tế.
 
 ## 6. Bảo mật và giới hạn MVP

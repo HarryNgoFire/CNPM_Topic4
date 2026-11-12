@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -9,8 +10,18 @@ import { Interval } from "@nestjs/schedule";
 import { DriverStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { Actor } from "../../common/security";
-import { PointDto } from "../../common/dto";
-import { buildGoogleMapsDirectionsUrl } from "../../common/google-maps";
+import { DriverLocationDto } from "../../common/dto";
+import { WebhooksService } from "../webhooks/webhooks.service";
+import { evaluateDriverGps } from "../../common/geo";
+
+export type LocationUpdateResult = {
+  accepted: boolean;
+  reason?: "TOO_SOON" | "STATIONARY";
+  lat: number;
+  lng: number;
+  capturedAt: string;
+  receivedAt: string;
+};
 function setting(name: string, fallback: number) {
   const v = Number(process.env[name] ?? fallback);
   if (!Number.isFinite(v) || v <= 0) throw new Error(`Invalid ${name}`);
@@ -20,7 +31,10 @@ function setting(name: string, fallback: number) {
 export class DispatchService {
   private running = false;
   private readonly logger = new Logger(DispatchService.name);
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly events: WebhooksService,
+  ) {}
   async assign(shipmentId: string, preferredDriverId?: string) {
     try {
       return await this.db.$transaction(async (tx) => {
@@ -127,10 +141,40 @@ export class DispatchService {
         });
         if (driver.status !== "AVAILABLE")
           throw new ConflictException("Driver is not available");
+
+        const shipment = await tx.shipment.findUniqueOrThrow({
+          where: { id: initial.shipmentId },
+        });
+        if (shipment.status !== "RECEIVED")
+          throw new ConflictException(
+            "Shipment is no longer awaiting assignment",
+          );
+
         await tx.driver.update({
           where: { id: driver.id },
           data: { status: "BUSY" },
         });
+
+        await tx.shipment.update({
+          where: { id: shipment.id },
+          data: { status: "EN_ROUTE_PICKUP" },
+        });
+
+        await tx.shipmentStatusHistory.create({
+          data: {
+            shipmentId: shipment.id,
+            fromStatus: "RECEIVED",
+            toStatus: "EN_ROUTE_PICKUP",
+            changedBy: actor.sub,
+          },
+        });
+
+        await this.events.record(
+          tx,
+          { id: shipment.id, trackingCode: shipment.trackingCode },
+          "RECEIVED",
+          "EN_ROUTE_PICKUP",
+        );
       }
       const updated = await tx.driverAssignment.update({
         where: { id },
@@ -159,56 +203,95 @@ export class DispatchService {
       },
       orderBy: { assignedAt: "asc" },
     });
-    if (!tasks.length) return tasks;
+    return tasks;
+  }
+  async location(
+    actor: Actor,
+    input: DriverLocationDto,
+  ): Promise<LocationUpdateResult> {
+    const driver = await this.driverFor(actor);
+    const serverNow = new Date();
 
-    // Prisma cannot materialize the PostGIS geography column, so fetch only the
-    // coordinates needed to produce stable Google Maps navigation links.
-    const ids = tasks.map((task) => task.shipmentId);
-    const points = await this.db.$queryRaw<
-      Array<{
-        shipmentId: string;
-        pickupLat: number;
-        pickupLng: number;
-        dropoffLat: number;
-        dropoffLng: number;
-      }>
-    >`
-      SELECT
-        s.id::text AS "shipmentId",
-        ST_Y(p.location::geometry)::double precision AS "pickupLat",
-        ST_X(p.location::geometry)::double precision AS "pickupLng",
-        ST_Y(d.location::geometry)::double precision AS "dropoffLat",
-        ST_X(d.location::geometry)::double precision AS "dropoffLng"
-      FROM "Shipment" s
-      JOIN "Address" p ON p.id = s."pickupAddressId"
-      JOIN "Address" d ON d.id = s."dropoffAddressId"
-      WHERE s.id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
-    `;
-    const byShipment = new Map(points.map((point) => [point.shipmentId, point]));
-    return tasks.map((task) => {
-      const point = byShipment.get(task.shipmentId);
-      return {
-        ...task,
-        navigationUrls: point
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Driver" WHERE id=${driver.id}::uuid FOR UPDATE`;
+
+      const priorRows = await tx.$queryRaw<
+        Array<{
+          lat: number | null;
+          lng: number | null;
+          locationAccuracyM: number | null;
+          locationCapturedAt: Date | null;
+        }>
+      >`
+        SELECT
+          ST_Y("currentLocation"::geometry)::double precision AS lat,
+          ST_X("currentLocation"::geometry)::double precision AS lng,
+          "locationAccuracyM",
+          "locationCapturedAt"
+        FROM "Driver"
+        WHERE id = ${driver.id}::uuid
+      `;
+
+      const prior = priorRows[0];
+      const priorData =
+        prior &&
+        prior.lat !== null &&
+        prior.lng !== null &&
+        prior.locationCapturedAt !== null
           ? {
-              pickup: buildGoogleMapsDirectionsUrl({
-                lat: point.pickupLat,
-                lng: point.pickupLng,
-              }),
-              dropoff: buildGoogleMapsDirectionsUrl({
-                lat: point.dropoffLat,
-                lng: point.dropoffLng,
-              }),
+              lat: prior.lat,
+              lng: prior.lng,
+              locationCapturedAt: prior.locationCapturedAt,
             }
-          : null,
+          : null;
+
+      const evalResult = evaluateDriverGps({
+        current: {
+          lat: input.lat,
+          lng: input.lng,
+          accuracyM: input.accuracyM,
+          capturedAt: input.capturedAt,
+        },
+        prior: priorData,
+        serverNow,
+      });
+
+      if (!evalResult.valid) {
+        throw new BadRequestException(evalResult.error);
+      }
+
+      const capturedAtIso = input.capturedAt;
+      const receivedAtIso = serverNow.toISOString();
+
+      if (!evalResult.accepted) {
+        return {
+          accepted: false,
+          reason: evalResult.reason,
+          lat: input.lat,
+          lng: input.lng,
+          capturedAt: capturedAtIso,
+          receivedAt: receivedAtIso,
+        };
+      }
+
+      const capturedDate = new Date(capturedAtIso);
+      await tx.$executeRaw`
+        UPDATE "Driver" SET
+          "currentLocation" = ST_SetSRID(ST_MakePoint(${input.lng}, ${input.lat}), 4326)::geography,
+          "lastLocationAt" = ${serverNow},
+          "locationAccuracyM" = ${input.accuracyM},
+          "locationCapturedAt" = ${capturedDate}
+        WHERE id = ${driver.id}::uuid
+      `;
+
+      return {
+        accepted: true,
+        lat: input.lat,
+        lng: input.lng,
+        capturedAt: capturedAtIso,
+        receivedAt: receivedAtIso,
       };
     });
-  }
-  async location(actor: Actor, input: PointDto) {
-    const driver = await this.driverFor(actor);
-    await this.db
-      .$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${input.lng},${input.lat}),4326)::geography,"lastLocationAt"=now() WHERE id=${driver.id}::uuid`;
-    return { lat: input.lat, lng: input.lng };
   }
   async status(actor: Actor, status: "AVAILABLE" | "OFFLINE") {
     const driver = await this.driverFor(actor);
@@ -233,10 +316,37 @@ export class DispatchService {
         status: "RECEIVED",
         assignments: { none: { status: { in: ["PENDING", "ACCEPTED"] } } },
       },
-      include: { assignments: { orderBy: { assignedAt: "desc" }, take: 1 } },
+      include: {
+        assignments: { orderBy: { assignedAt: "desc" } },
+        pickup: true,
+        dropoff: true,
+      },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
+  }
+  async drivers() {
+    const list = await this.db.driver.findMany({
+      include: {
+        user: { select: { id: true, name: true, email: true, active: true } },
+        assignments: {
+          where: { status: { in: ["PENDING", "ACCEPTED"] } },
+          select: { id: true, status: true, shipmentId: true },
+        },
+      },
+    });
+    return list.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      name: d.user?.name || "Tài xế",
+      email: d.user?.email,
+      vehicleType: d.vehicleType,
+      status: d.status,
+      active: d.user?.active,
+      isAvailable: d.status === "AVAILABLE" && d.assignments.length === 0,
+      activeTasksCount: d.assignments.length,
+      lastLocationAt: d.lastLocationAt,
+    }));
   }
   async expireOne(id: string) {
     const initial = await this.db.driverAssignment.findUnique({

@@ -1,11 +1,12 @@
 import { Module } from "@nestjs/common";
 import { PricingService } from "./pricing.service";
 import { PricingController } from "./pricing.controller";
-import { OsrmRoutingService } from "./osrm-routing.service";
+import { RoutingService } from "./routing.service";
+
 @Module({
   imports: [],
-  providers: [PricingService, OsrmRoutingService],
+  providers: [PricingService, RoutingService],
   controllers: [PricingController],
-  exports: [PricingService],
+  exports: [PricingService, RoutingService],
 })
 export class PricingModule {}

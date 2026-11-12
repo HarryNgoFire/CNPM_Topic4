@@ -8,7 +8,8 @@ import { PricingRule, ServiceType } from "@prisma/client";
 import Decimal from "decimal.js";
 import { PrismaService } from "../../database/prisma.service";
 import { BookingDto, PricingRuleDto } from "../../common/dto";
-import { OsrmRoutingService } from "./osrm-routing.service";
+import { RoutingService } from "./routing.service";
+
 export function calculateFee(
   rule: PricingRule,
   distanceKm: number,
@@ -53,12 +54,14 @@ export function calculateFee(
     fee: fee.toNumber(),
   };
 }
+
 @Injectable()
 export class PricingService {
   constructor(
     private readonly db: PrismaService,
-    private readonly routing: OsrmRoutingService,
+    private readonly routing: RoutingService,
   ) {}
+
   async quote(input: BookingDto) {
     const rule = await this.db.pricingRule.findFirst({
       where: { active: true, effectiveFrom: { lte: new Date() } },
@@ -66,24 +69,37 @@ export class PricingService {
     });
     if (!rule)
       throw new ServiceUnavailableException("No effective pricing rule");
+
     // Call the road-routing service before opening any shipment transaction.
     // If OSRM is unavailable, fail the quote rather than silently charging by
     // straight-line distance.
-    const route = await this.routing.getDistance(
+    const route = await this.routing.getRoute([
       input.pickupAddress,
       input.dropoffAddress,
-    );
-    return calculateFee(
+    ]);
+
+    const feeCalculation = calculateFee(
       rule,
       route.distanceKm,
       input.parcel.weightKg,
       input.serviceType,
-      route.distanceSource,
+      "OSRM_DRIVING",
     );
+
+    return {
+      ...feeCalculation,
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.durationSeconds,
+      geometry: route.geometry,
+      source: route.source,
+      profile: route.profile,
+    };
   }
+
   listRules() {
     return this.db.pricingRule.findMany({ orderBy: { version: "desc" } });
   }
+
   async revise(id: string, input: PricingRuleDto) {
     return this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(84001)`;

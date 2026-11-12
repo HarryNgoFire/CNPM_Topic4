@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Patch } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { DriverStatusDto, PointDto } from "../../common/dto";
+import { DriverLocationDto, DriverStatusDto } from "../../common/dto";
 import { Actor, CurrentActor, Roles } from "../../common/security";
-import { DispatchService } from "../dispatch/dispatch.service";
+import { DispatchService, LocationUpdateResult } from "../dispatch/dispatch.service";
 @ApiTags("Drivers")
 @ApiBearerAuth()
 @Roles("DRIVER")
@@ -14,8 +14,8 @@ export class DriversController {
   }
   @Patch("location") location(
     @CurrentActor() actor: Actor,
-    @Body() input: PointDto,
-  ) {
+    @Body() input: DriverLocationDto,
+  ): Promise<LocationUpdateResult> {
     return this.service.location(actor, input);
   }
   @Patch("status") status(

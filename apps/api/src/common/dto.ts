@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 import {
   IsEnum,
   IsLatitude,
@@ -19,12 +19,25 @@ import {
   IsUUID,
   Matches,
   IsBoolean,
+  IsISO8601,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { ServiceType, ShipmentStatus } from "@prisma/client";
 export class PointDto {
   @ApiProperty({ example: 10.754 }) @IsNumber() @IsLatitude() lat!: number;
   @ApiProperty({ example: 106.663 }) @IsNumber() @IsLongitude() lng!: number;
+}
+export class DriverLocationDto extends PointDto {
+  @ApiProperty({ example: 10.5, description: "Accuracy in meters (max 200)" })
+  @IsNumber()
+  @Min(0.01)
+  @Max(200)
+  accuracyM!: number;
+
+  @ApiProperty({ example: "2026-11-10T02:00:00.000Z", description: "ISO 8601 capture timestamp" })
+  @IsString()
+  @IsISO8601()
+  capturedAt!: string;
 }
 export class AddressDto extends PointDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(255) line!: string;
@@ -83,6 +96,18 @@ export class TransitionDto {
   @ApiProperty({ enum: ShipmentStatus })
   @IsEnum(ShipmentStatus)
   toStatus!: ShipmentStatus;
+
+  @ApiPropertyOptional({
+    description: "Required for CANCELLED and DELIVERY_FAILED; 1-255 characters",
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  reason?: string;
 }
 export class DriverStatusDto {
   @ApiProperty({ enum: ["AVAILABLE", "OFFLINE"] })
@@ -207,4 +232,34 @@ export class AssignDto {
   @IsOptional()
   @IsUUID("4")
   driverId?: string;
+}
+
+export class GeocodingSearchDto {
+  @ApiProperty({ description: "Search query", minLength: 3, maxLength: 200 })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(200)
+  q!: string;
+
+  @ApiPropertyOptional({ description: "Result limit (1..5)", default: 5 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  limit: number = 5;
+}
+
+export class GeocodingReverseDto {
+  @ApiProperty({ example: 10.754 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 106.663 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  lng!: number;
 }

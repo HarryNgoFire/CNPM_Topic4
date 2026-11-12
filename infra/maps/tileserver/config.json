@@ -1,0 +1,34 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "fonts": "fonts",
+      "sprites": "sprites",
+      "styles": "/config/styles",
+      "mbtiles": "/data"
+    },
+    "formatQuality": {
+      "png": 80,
+      "webp": 80
+    },
+    "maxSize": 2048,
+    "pbfFactor": 0,
+    "serveAllStyles": false
+  },
+  "styles": {
+    "moveflow": {
+      "style": "moveflow.json",
+      "tilejson": {
+        "type": "overlay",
+        "bounds": [105.8, 10.3, 107.4, 11.4],
+        "minzoom": 8,
+        "maxzoom": 16
+      }
+    }
+  },
+  "data": {
+    "v3": {
+      "mbtiles": "hcmc.mbtiles"
+    }
+  }
+}

@@ -49,11 +49,30 @@ export class ShipmentsController {
   ) {
     return this.service.get(id, actor);
   }
-  @Post(":id/transition") @HttpCode(200) @Roles("DRIVER", "ADMIN") transition(
+  @Get(":id/navigation")
+  @Roles("DRIVER", "ADMIN", "SENDER")
+  navigation(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.service.navigation(id, actor);
+  }
+  @Get(":id/live")
+  @Roles("SENDER", "ADMIN", "DISPATCHER", "DRIVER")
+  live(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.service.live(id, actor);
+  }
+  @Post(":id/transition")
+  @HttpCode(200)
+  @Roles("DRIVER", "ADMIN", "SENDER")
+  transition(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() input: TransitionDto,
     @CurrentActor() actor: Actor,
   ) {
-    return this.service.transition(id, input.toStatus, actor);
+    return this.service.transition(id, input, actor);
   }
 }

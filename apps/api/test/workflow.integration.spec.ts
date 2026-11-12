@@ -53,6 +53,30 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       );
     process.env.JWT_SECRET ??= "integration-jwt-secret-at-least-32-chars";
     process.env.WEBHOOK_ALLOW_HTTP = "true";
+    process.env.OSRM_BASE_URL = "https://router.project-osrm.org";
+    const originalFetch = global.fetch;
+    global.fetch = async (input: any, init?: any) => {
+      const urlStr = input?.url || input?.toString() || "";
+      if (urlStr.includes("router.project-osrm.org")) {
+        const match = urlStr.match(/\/route\/v1\/[^\/]+\/([^?]+)/);
+        const pairs = match ? match[1].split(";").map((s: string) => s.split(",").map(Number)) : [[106.663, 10.754], [106.698, 10.772]];
+        const isZero = pairs.length >= 2 && pairs[0][0] === pairs[1][0] && pairs[0][1] === pairs[1][1];
+        const dist = isZero ? 0 : 4200;
+        return new Response(JSON.stringify({
+          code: "Ok",
+          routes: [{
+            distance: dist,
+            duration: isZero ? 0 : 360,
+            geometry: {
+              type: "LineString",
+              coordinates: pairs,
+            },
+          }],
+          waypoints: pairs.map((p: any) => ({ distance: 0, location: p })),
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return originalFetch(input, init);
+    };
     receiver = createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -155,7 +179,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
           data: { userId: users[name].id, status: "AVAILABLE" },
         });
         const lng = name === "driverA" ? address.lng : address.lng + 0.005;
-        await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${lng},${address.lat}),4326)::geography,"lastLocationAt"=now() WHERE id=${drivers[name].id}::uuid`;
+        await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${lng},${address.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers[name].id}::uuid`;
       }
       const res = await request(app.getHttpServer())
         .post("/api/v1/auth/login")
@@ -199,15 +223,27 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .post(`assignments/${assignment.id}/respond`)
       .send({ action: "ACCEPT" })
       .expect(200);
-    for (const toStatus of ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"])
-      await call("driverA")
-        .post(`shipments/${shipment.id}/transition`)
-        .send({ toStatus })
-        .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_PICKUP" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "OUT_FOR_DELIVERY" })
+      .expect(200);
+    await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${booking.dropoffAddress.lng},${booking.dropoffAddress.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers.driverA.id}::uuid`;
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_DROPOFF" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "DELIVERED" })
+      .expect(200);
     const tracking = await request(app.getHttpServer())
       .get("/api/v1/tracking/" + shipment.trackingCode)
       .expect(200);
-    expect(tracking.body.history).toHaveLength(4);
+    expect(tracking.body.history).toHaveLength(6);
     expect(tracking.body).not.toHaveProperty("senderId");
     expect(tracking.body.pickup).toEqual({ city: "HCMC" });
     expect(
@@ -220,10 +256,10 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       }),
     ).toBe(1);
     await webhooks.sendBatch();
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(6);
     expect(
       await db.webhookDelivery.count({ where: { status: "DELIVERED" } }),
-    ).toBe(4);
+    ).toBe(6);
   });
   it("calculates zero-distance quote and geography distance in metres", async () => {
     const quote = await call("sender")
@@ -339,7 +375,7 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
         sub: users.sender.id,
         role: "SENDER",
       });
-    await Promise.all([dispatch.assign(first.id), dispatch.assign(second.id)]);
+    await Promise.allSettled([dispatch.assign(first.id), dispatch.assign(second.id)]);
     expect(
       await db.driverAssignment.count({
         where: { driverId: drivers.driverA.id, status: "PENDING" },
@@ -355,17 +391,17 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .expect(200);
     const actor = { sub: users.driverA.id, role: "DRIVER" as const };
     await Promise.all([
-      shipments.transition(shipment.id, "IN_TRANSIT", actor),
-      shipments.transition(shipment.id, "IN_TRANSIT", actor),
+      shipments.transition(shipment.id, "ARRIVED_PICKUP", actor),
+      shipments.transition(shipment.id, "ARRIVED_PICKUP", actor),
     ]);
     expect(
       await db.shipmentStatusHistory.count({
-        where: { shipmentId: shipment.id, toStatus: "IN_TRANSIT" },
+        where: { shipmentId: shipment.id, toStatus: "ARRIVED_PICKUP" },
       }),
     ).toBe(1);
     expect(
       await db.webhookEvent.count({ where: { shipmentId: shipment.id } }),
-    ).toBe(2);
+    ).toBe(3);
   });
   it("blocks skipped status and unauthorized driver", async () => {
     const shipment = await create();
@@ -388,6 +424,16 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     await call("other")
       .get("shipments/" + shipment.id)
       .expect(403);
+  });
+  it("protects live tracking privacy: blocks unrelated sender and allows owner", async () => {
+    const shipment = await create();
+    await call("other")
+      .get(`shipments/${shipment.id}/live`)
+      .expect(403);
+    const res = await call("sender")
+      .get(`shipments/${shipment.id}/live`)
+      .expect(200);
+    expect(res.body.shipmentId).toBe(shipment.id);
   });
   it("refuses driver availability change during pending assignment", async () => {
     await create();
@@ -471,12 +517,12 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     ).rejects.toThrow();
   });
   it("dispatcher can choose an available driver explicitly", async () => {
-    await db.driver.updateMany({ data: { lastLocationAt: new Date(0) } });
+    await db.driver.updateMany({ data: { lastLocationAt: new Date(0), locationCapturedAt: new Date(Date.now() - 120000) } });
     const shipment = await create();
     await request(app.getHttpServer())
       .patch("/api/v1/drivers/me/location")
       .set("Authorization", "Bearer " + tokens.driverB)
-      .send({ lat: 10.754, lng: 106.668 })
+      .send({ lat: 10.754, lng: 106.668, accuracyM: 10, capturedAt: new Date().toISOString() })
       .expect(200);
     const assigned = await call("dispatcher")
       .post(`shipments/${shipment.id}/assign-driver`)
@@ -510,17 +556,17 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
     try {
       await call("driverA")
         .post(`shipments/${shipment.id}/transition`)
-        .send({ toStatus: "IN_TRANSIT" })
+        .send({ toStatus: "ARRIVED_PICKUP" })
         .expect(500);
       expect(
         (await db.shipment.findUniqueOrThrow({ where: { id: shipment.id } }))
           .status,
-      ).toBe("RECEIVED");
+      ).toBe("EN_ROUTE_PICKUP");
       expect(
         await db.shipmentStatusHistory.count({
           where: { shipmentId: shipment.id },
         }),
-      ).toBe(1);
+      ).toBe(2);
     } finally {
       spy.mockRestore();
     }
@@ -562,5 +608,107 @@ describe("PostgreSQL/PostGIS delivery workflow", () => {
       .send({ driverId: drivers.driverB.id })
       .expect(200);
     expect(manuallyAssigned.body.driverId).toBe(drivers.driverB.id);
+  });
+  it("supports legacy IN_TRANSIT shipment progressing through state machine", async () => {
+    const shipment = await create();
+    const assignment = await pending(shipment.id);
+    await call("driverA")
+      .post(`assignments/${assignment.id}/respond`)
+      .send({ action: "ACCEPT" })
+      .expect(200);
+    await db.shipment.update({
+      where: { id: shipment.id },
+      data: { status: "IN_TRANSIT" },
+    });
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "OUT_FOR_DELIVERY" })
+      .expect(200);
+    await db.$executeRaw`UPDATE "Driver" SET "currentLocation"=ST_SetSRID(ST_MakePoint(${booking.dropoffAddress.lng},${booking.dropoffAddress.lat}),4326)::geography,"lastLocationAt"=now(),"locationAccuracyM"=10,"locationCapturedAt"=now() WHERE id=${drivers.driverA.id}::uuid`;
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "ARRIVED_DROPOFF" })
+      .expect(200);
+    await call("driverA")
+      .post(`shipments/${shipment.id}/transition`)
+      .send({ toStatus: "DELIVERED" })
+      .expect(200);
+    const finalShipment = await db.shipment.findUniqueOrThrow({
+      where: { id: shipment.id },
+    });
+    expect(finalShipment.status).toBe("DELIVERED");
+    expect(
+      (await db.driver.findUniqueOrThrow({ where: { id: drivers.driverA.id } }))
+        .status,
+    ).toBe("AVAILABLE");
+  });
+  it("tracks driver GPS location with throttling and metadata", async () => {
+    await db.driver.update({
+      where: { id: drivers.driverA.id },
+      data: {
+        lastLocationAt: new Date(Date.now() - 60000),
+        locationCapturedAt: new Date(Date.now() - 120000),
+      },
+    });
+    const t0 = new Date(Date.now() - 10000).toISOString();
+    const res1 = await request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", "Bearer " + tokens.driverA)
+      .send({ lat: 10.754, lng: 106.663, accuracyM: 12.5, capturedAt: t0 })
+      .expect(200);
+    expect(res1.body.accepted).toBe(true);
+    expect(res1.body.lat).toBe(10.754);
+    expect(res1.body.lng).toBe(106.663);
+    expect(res1.body.capturedAt).toBe(t0);
+
+    // Fast repeated update (< 5s) is throttled
+    const t1 = new Date(Date.now() - 8000).toISOString();
+    const res2 = await request(app.getHttpServer())
+      .patch("/api/v1/drivers/me/location")
+      .set("Authorization", "Bearer " + tokens.driverA)
+      .send({ lat: 10.75405, lng: 106.66305, accuracyM: 10, capturedAt: t1 })
+      .expect(200);
+    expect(res2.body.accepted).toBe(false);
+    expect(res2.body.reason).toBe("TOO_SOON");
+  });
+  it("provides phase-aware navigation with authorization and geofence eligibility", async () => {
+    const shipment = await create();
+    const assignment = await pending(shipment.id);
+    await call("driverA")
+      .post(`assignments/${assignment.id}/respond`)
+      .send({ action: "ACCEPT" })
+      .expect(200);
+
+    // driverA is assigned and accepts -> EN_ROUTE_PICKUP
+    // driverB is unrelated driver -> 403
+    await call("driverB")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(403);
+
+    // other is unrelated sender -> 403
+    await call("other")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(403);
+
+    // sender (owner) -> 200
+    const senderNav = await call("sender")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(senderNav.body.phase).toBe("TO_PICKUP");
+    expect(senderNav.body.destination.kind).toBe("PICKUP");
+
+    // driverA -> 200
+    const driverNav = await call("driverA")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(driverNav.body.phase).toBe("TO_PICKUP");
+    expect(driverNav.body.destination.kind).toBe("PICKUP");
+    expect(driverNav.body.arrival.eligible).toBe(true);
+
+    // admin -> 200
+    const adminNav = await call("admin")
+      .get(`shipments/${shipment.id}/navigation`)
+      .expect(200);
+    expect(adminNav.body.phase).toBe("TO_PICKUP");
   });
 });

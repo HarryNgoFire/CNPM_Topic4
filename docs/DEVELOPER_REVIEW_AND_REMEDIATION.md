@@ -7,8 +7,9 @@
 3. **Có thể tự đăng ký DRIVER từ endpoint công khai**: DTO đăng ký không nhận role; service luôn tạo `SENDER`. Tài khoản quản trị/tài xế chỉ được cấp riêng.
 4. **Thiếu giao diện hồ sơ và quản lý tài khoản**: thêm API `users/me`, cập nhật tên, đổi mật khẩu, danh sách tài khoản admin và khóa/mở khóa account. Khóa account thu hồi refresh sessions.
 5. **OTP provider thất bại có thể để lại tài khoản mồ côi**: đăng ký xóa account mới tạo nếu gửi code thất bại; resend có cooldown.
-6. **Không có luồng UI cho công việc tài xế**: thêm nhận/từ chối assignment, cập nhật trạng thái và link điều hướng Google Maps.
+6. **Không có luồng UI cho công việc tài xế**: thêm nhận/từ chối assignment, cập nhật trạng thái và điều hướng MapLibre GL 2 chặng.
 7. **Không có hướng dẫn tích hợp các phần**: thêm `USER_GUIDE.md`, `EMAIL_OTP_SETUP.md` và Compose service frontend.
+8. **Bản đồ phân mảnh và thiếu cơ chế Geofence**: Đã thay thế toàn bộ Leaflet bằng MapLibre GL v4.7.1, chuẩn hóa định tuyến OSRM, quy trình giao hàng hai chặng có Geofence 100m, bảo mật vị trí tài xế (live tracking), và cung cấp stack bản đồ tự lưu trữ tùy chọn (`compose.maps.yaml`). Đạt 100% kiểm thử (397 tests backend, 13 tests frontend). Xem chi tiết tại [docs/maps/architecture.md](maps/architecture.md) và [docs/maps/verification.md](maps/verification.md).
 
 ## Rủi ro còn tồn tại / nên giải quyết tiếp
 

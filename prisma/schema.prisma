@@ -13,9 +13,14 @@ enum Role {
 }
 enum ShipmentStatus {
   RECEIVED
+  EN_ROUTE_PICKUP
+  ARRIVED_PICKUP
   IN_TRANSIT
   OUT_FOR_DELIVERY
+  ARRIVED_DROPOFF
   DELIVERED
+  CANCELLED
+  DELIVERY_FAILED
 }
 enum DriverStatus {
   OFFLINE
@@ -68,6 +73,8 @@ model Driver {
   status DriverStatus @default(OFFLINE)
   currentLocation Unsupported("geography(Point,4326)")?
   lastLocationAt DateTime?
+  locationAccuracyM Float?
+  locationCapturedAt DateTime?
   user User @relation(fields:[userId],references:[id])
   assignments DriverAssignment[]
 }
@@ -91,6 +98,7 @@ model Shipment {
   serviceType ServiceType
   fee Decimal @db.Decimal(12,2)
   feeBreakdown Json
+  reason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sender User @relation(fields:[senderId],references:[id])
@@ -130,6 +138,7 @@ model ShipmentStatusHistory {
   fromStatus ShipmentStatus?
   toStatus ShipmentStatus
   changedBy String @db.Uuid
+  reason String?
   occurredAt DateTime @default(now())
   shipment Shipment @relation(fields:[shipmentId],references:[id])
   actor User @relation(fields:[changedBy],references:[id])
