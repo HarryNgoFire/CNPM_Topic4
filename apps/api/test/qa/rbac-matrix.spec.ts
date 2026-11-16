@@ -11,6 +11,7 @@ import { ShipmentsService } from "../../src/modules/shipments/shipments.service"
 import { DispatchService } from "../../src/modules/dispatch/dispatch.service";
 import { WebhooksService } from "../../src/modules/webhooks/webhooks.service";
 import { UsersService } from "../../src/modules/users/users.service";
+import { GeocodingService } from "../../src/modules/geocoding/geocoding.service";
 
 type Role = "SENDER" | "DRIVER" | "DISPATCHER" | "ADMIN";
 const ROLES: Role[] = ["SENDER", "DRIVER", "DISPATCHER", "ADMIN"];
@@ -30,15 +31,21 @@ const ENDPOINTS: [string, string, Role[]][] = [
   ["post", "/shipments", ["SENDER", "ADMIN"]],
   ["get", "/shipments", ["SENDER", "ADMIN", "DISPATCHER"]],
   ["get", "/shipments/:id", ["SENDER", "ADMIN", "DISPATCHER", "DRIVER"]],
+  ["get", "/shipments/:id/navigation", ["DRIVER", "ADMIN", "SENDER"]],
+  ["get", "/shipments/:id/live", ["SENDER", "ADMIN", "DISPATCHER", "DRIVER"]],
   ["post", "/shipments/:id/transition", ["DRIVER", "ADMIN", "SENDER"]],
   ["post", "/shipments/:id/assign-driver", ["DISPATCHER", "ADMIN"]],
   ["post", "/assignments/:id/respond", ["DRIVER"]],
   ["get", "/dispatch/queue", ["DISPATCHER", "ADMIN"]],
+  ["get", "/dispatch/drivers", ["DISPATCHER", "ADMIN"]],
   ["get", "/drivers/me/tasks", ["DRIVER"]],
   ["patch", "/drivers/me/location", ["DRIVER"]],
   ["patch", "/drivers/me/status", ["DRIVER"]],
   ["post", "/webhooks/subscriptions", ["ADMIN"]],
+  ["get", "/webhooks/subscriptions", ["ADMIN"]],
   ["get", "/webhooks/events", ["ADMIN"]],
+  ["get", "/geocoding/search", ROLES],
+  ["get", "/geocoding/reverse", ROLES],
   ["get", "/users/me", ROLES],
   ["patch", "/users/me", ROLES],
   ["patch", "/users/me/password", ROLES],
@@ -50,7 +57,7 @@ const ENDPOINTS: [string, string, Role[]][] = [
 const stub = (...names: string[]) =>
   Object.fromEntries(names.map((n) => [n, jest.fn().mockResolvedValue({})]));
 
-describe("QA: RBAC matrix (21 endpoints x anonymous + 4 roles)", () => {
+describe("QA: RBAC matrix (27 endpoints x anonymous + 4 roles)", () => {
   let app: INestApplication;
   let jwt: JwtService;
   const db: any = {
@@ -67,11 +74,13 @@ describe("QA: RBAC matrix (21 endpoints x anonymous + 4 roles)", () => {
       .overrideProvider(PricingService)
       .useValue(stub("quote", "listRules", "revise"))
       .overrideProvider(ShipmentsService)
-      .useValue(stub("create", "list", "get", "transition", "tracking"))
+      .useValue(stub("create", "list", "get", "transition", "tracking", "navigation", "live"))
       .overrideProvider(DispatchService)
-      .useValue(stub("assign", "respond", "queue", "tasks", "location", "status"))
+      .useValue(stub("assign", "respond", "queue", "drivers", "tasks", "location", "status"))
       .overrideProvider(WebhooksService)
-      .useValue(stub("subscribe", "events"))
+      .useValue(stub("subscribe", "subscriptions", "events"))
+      .overrideProvider(GeocodingService)
+      .useValue(stub("search", "reverse"))
       .overrideProvider(UsersService)
       .useValue(
         stub("me", "updateProfile", "changePassword", "listUsers", "setUserActive"),
