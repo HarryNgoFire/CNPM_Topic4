@@ -105,7 +105,7 @@ export class UsersService {
       return await this.db.$transaction(async (tx) => {
         // Serialize admin account-state changes so two parallel requests cannot
         // deactivate the final active administrator at the same time.
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(84002)`;
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(84002)`;
         const target = await tx.user.findUnique({
           where: { id },
           select: { id: true, role: true },
