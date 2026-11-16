@@ -1,7 +1,5 @@
-import {
-  ShipmentsService,
-  canTransition,
-} from "../src/modules/shipments/shipments.service";
+import { ShipmentsService } from "../src/modules/shipments/shipments.service";
+import { canTransition } from "../src/modules/shipments/state-machine";
 import { ShipmentStatus } from "@prisma/client";
 describe("Shipment state machine and ownership", () => {
   const db: any = {

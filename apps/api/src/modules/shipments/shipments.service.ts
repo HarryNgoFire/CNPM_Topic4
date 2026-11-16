@@ -15,6 +15,7 @@ import { PricingService } from "../pricing/pricing.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { evaluateGeofenceArrival } from "../../common/geo";
 import { RoutingService, RouteResult } from "../pricing/routing.service";
+import { canTransition } from "./state-machine";
 
 export type NavigationPhase =
   | "TO_PICKUP"
@@ -51,27 +52,6 @@ export type NavigationResponse = {
   routingError?: string | null;
 };
 
-const VALID_TRANSITIONS = new Set<string>([
-  "RECEIVED>EN_ROUTE_PICKUP",
-  "EN_ROUTE_PICKUP>ARRIVED_PICKUP",
-  "ARRIVED_PICKUP>OUT_FOR_DELIVERY",
-  "OUT_FOR_DELIVERY>ARRIVED_DROPOFF",
-  "ARRIVED_DROPOFF>DELIVERED",
-  "IN_TRANSIT>OUT_FOR_DELIVERY",
-  "OUT_FOR_DELIVERY>DELIVERY_FAILED",
-  "ARRIVED_DROPOFF>DELIVERY_FAILED",
-  "IN_TRANSIT>DELIVERY_FAILED",
-  "RECEIVED>CANCELLED",
-  "EN_ROUTE_PICKUP>CANCELLED",
-  "ARRIVED_PICKUP>CANCELLED",
-  "IN_TRANSIT>CANCELLED",
-  "OUT_FOR_DELIVERY>CANCELLED",
-  "ARRIVED_DROPOFF>CANCELLED",
-]);
-
-export function canTransition(current: ShipmentStatus, next: ShipmentStatus): boolean {
-  return VALID_TRANSITIONS.has(`${current}>${next}`);
-}
 @Injectable()
 export class ShipmentsService {
   constructor(
@@ -315,7 +295,9 @@ export class ShipmentsService {
       }
 
       if (!canTransition(shipment.status, toStatus)) {
-        throw new ConflictException("Invalid status transition");
+        throw new ConflictException(
+          `Invalid status transition: ${shipment.status} -> ${toStatus}`,
+        );
       }
 
       if (
