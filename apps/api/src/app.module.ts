@@ -3,7 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { DatabaseModule } from "./database/database.module";
-import { SecurityGuard } from "./common/security";
+import { AuthGuard, RolesGuard } from "./common/security";
 import { PricingModule } from "./modules/pricing/pricing.module";
 import { DispatchModule } from "./modules/dispatch/dispatch.module";
 import { WebhooksModule } from "./modules/webhooks/webhooks.module";
@@ -28,7 +28,8 @@ import { GeocodingModule } from "./modules/geocoding/geocoding.module";
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: SecurityGuard },
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

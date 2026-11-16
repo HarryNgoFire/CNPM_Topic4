@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { compare, hash } from "bcryptjs";
@@ -60,8 +59,10 @@ export class UsersService {
       throw new BadRequestException("New password must be different");
     const user = await this.db.user.findUnique({ where: { id: actor.sub } });
     if (!user) throw new NotFoundException("Account not found");
+    // 401 is reserved for a bad access token: the web client answers it by
+    // rotating the session, which a mistyped password must not trigger.
     if (!(await compare(input.currentPassword, user.passwordHash)))
-      throw new UnauthorizedException("Current password is incorrect");
+      throw new BadRequestException("Current password is incorrect");
 
     await this.db.$transaction(async (tx) => {
       await tx.user.update({

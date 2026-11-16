@@ -4,22 +4,29 @@ import helmet from "helmet";
 import { addResponseContracts } from "./common/openapi-responses";
 import { DecimalInterceptor } from "./common/serialization";
 import { ErrorFilter } from "./common/errors";
+/**
+ * Which proxies may set X-Forwarded-For. The rate limiter keys on the client
+ * address, so behind nginx this must trust exactly the nginx hop, otherwise
+ * every web user shares one bucket.
+ * Unset: loopback only. "true" or a number: that many hops ("false" or "0"
+ * disables). Anything else is passed to Express as an address/subnet list and
+ * an invalid value stops the API at startup instead of being ignored.
+ */
+export function trustProxySetting(
+  raw = process.env.TRUST_PROXY?.trim(),
+): boolean | number | string {
+  if (!raw) return "loopback";
+  if (raw === "true") return 1;
+  if (raw === "false") return false;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
 export function configure(app: INestApplication) {
-  try {
-    const expressApp = app.getHttpAdapter().getInstance();
-    if (expressApp && typeof expressApp.set === "function") {
-      const trustProxyEnv = process.env.TRUST_PROXY;
-      if (trustProxyEnv === "true" || trustProxyEnv === "1") {
-        expressApp.set("trust proxy", 1);
-      } else if (trustProxyEnv) {
-        expressApp.set("trust proxy", trustProxyEnv);
-      } else {
-        expressApp.set("trust proxy", "loopback");
-      }
-    }
-  } catch {
-    // Adapter may differ in non-express test harnesses
-  }
+  const instance = app.getHttpAdapter?.()?.getInstance?.();
+  // Only the Express adapter has `set`; other adapters and test doubles keep
+  // their defaults. Errors from Express itself are not caught on purpose.
+  if (typeof instance?.set === "function")
+    instance.set("trust proxy", trustProxySetting());
   app.setGlobalPrefix("api/v1");
   app.use(helmet());
   app.enableCors({
