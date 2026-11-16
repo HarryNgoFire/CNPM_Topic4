@@ -17,6 +17,11 @@ File `202610110001_m2_baseline` đã được tách thành chín migration nhỏ
 |      7 | `20261011120600_shipment_status_history`     | Bảng `ShipmentStatusHistory`, trigger append-only                                    | FR-09, BR-AUDIT-01        |
 |      8 | `20261011120700_pricing_rules`               | Bảng `PricingRule` có version, CHECK giá trị hợp lệ                                  | FR-03, BR-PRICE-02        |
 |      9 | `20261011120800_webhook_outbox`              | Enum `DeliveryStatus`, bảng `WebhookSubscription`, `WebhookEvent`, `WebhookDelivery` | FR-10, BR-WEBHOOK-01      |
+|     10 | `20261028120000_email_verification_and_accounts` | Cột `User.emailVerified`, `User.createdAt`, bảng `EmailVerificationCode`         | FR-12                     |
+|     11 | `20261110020000_two_stage_delivery_state`    | Thêm 5 giá trị `ShipmentStatus`, cột `reason` trên `Shipment` và `ShipmentStatusHistory` | BR-STATE-01..05       |
+|     12 | `20261110030000_driver_location_metadata`    | Cột `Driver.locationAccuracyM`, `Driver.locationCapturedAt`                          | BR-STATE-05               |
+
+Migration 10–12 được thêm sau đợt tách baseline, cùng các tính năng xác minh email OTP và giao hai chặng. Bảng transition mới nằm ở [`STATE_MACHINE.md`](STATE_MACHINE.md).
 
 ### Cách đã kiểm chứng
 
@@ -56,16 +61,17 @@ CI không bị ảnh hưởng vì mỗi lần chạy đều dùng database mới
 
 | Sơ đồ                            | Nguồn chỉnh sửa (draw.io)                                  | Ảnh dùng cho báo cáo                                    |
 | -------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| ERD 12 bảng, ký pháp crow's-foot | `docs/architecture/diagrams/erd.drawio`                    | `docs/architecture/diagrams/erd.png`                    |
-| State machine vòng đời Shipment  | `docs/architecture/diagrams/shipment-state-machine.drawio` | `docs/architecture/diagrams/shipment-state-machine.png` |
+| ERD 13 bảng, ký pháp crow's-foot | `docs/architecture/diagrams/erd.drawio`                    | `docs/architecture/diagrams/erd.png`                    |
+| State machine giao hai chặng, 9 trạng thái | `docs/architecture/diagrams/shipment-state-machine.drawio` | `docs/architecture/diagrams/shipment-state-machine.png` |
 
 Mở file `.drawio` bằng app.diagrams.net hoặc draw.io Desktop. Khi schema hoặc luồng transition thay đổi, sửa file `.drawio` và xuất lại PNG trong cùng commit.
 
 ### Điểm khác so với mục 6.2 của tài liệu triển khai
 
-Tài liệu triển khai mô tả 9 bảng ở mức khái niệm. Schema thực tế có 12 bảng vì các yêu cầu khác trong chính tài liệu đó cần thêm chỗ lưu:
+Tài liệu triển khai mô tả 9 bảng ở mức khái niệm. Schema thực tế có 13 bảng vì các yêu cầu khác trong chính tài liệu đó cần thêm chỗ lưu:
 
 - `RefreshSession`: mục 12.1 yêu cầu lưu hash của refresh token để thu hồi được.
+- `EmailVerificationCode`: lưu hash mã OTP 6 số, hạn 10 phút, tối đa 5 lần nhập sai, phục vụ xác minh email khi đăng ký.
 - `WebhookSubscription` và `WebhookDelivery`: mục 11.4 có API đăng ký URL nhận webhook; mỗi subscription cần trạng thái gửi và số lần thử riêng.
 - `PricingRule`: một dòng là một bộ tham số đầy đủ có `version`, tránh ghép tham số của nhiều phiên bản khi tính phí.
 - `ShipmentStatusHistory.fromStatus` cho phép NULL: mốc RECEIVED đầu tiên không có trạng thái trước đó.
