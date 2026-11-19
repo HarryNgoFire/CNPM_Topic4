@@ -1,122 +1,117 @@
-# Báo cáo kiểm thử — M4 (QA)
+# Báo cáo kiểm thử — M4 (QA) — MoveFlow
+
+> Báo cáo này thay thế bản ghi nhận trên commit `a2f7379`. Mọi con số là kết quả thật của các lần chạy ghi ở mục 1. Mục nào chưa chạy lại trên commit này thì ghi rõ "chưa chạy lại" (xem mục 7). Không gán số liệu của bản cũ cho commit hiện tại.
 
 ## 1. Thông tin lần chạy
 
 | Mục | Giá trị |
 |---|---|
-| Ngày chạy | 2026-10-18 |
-| Commit được kiểm thử | `d59b716` (đầu nhánh M2 tại thời điểm chạy; các file test của M4 được thêm lên trên commit này) |
-| Nhánh | `feature/m4-testing` (tách từ `feature/m2-backend-services`, đã gồm 9 migration của M3) |
+| Ngày chạy | 2026-11-17 đến 2026-11-18 |
+| Commit kiểm thử | `513f80a` (nhánh `main`, merge PR #14) |
 | Môi trường | Windows PowerShell 5.1, Node v24.22.0 (CI/Docker dùng 22.22.3), npm 11.19.1, Docker 29.8.2, Compose v5.6.0 |
 | Người chạy | M4 |
+| Phiên bản hệ thống | Vòng đời đơn 9 trạng thái (2 chặng), geofence 100 m, kiểm tra GPS phía máy chủ, OTP email, giao diện MoveFlow (cổng 3005), API (cổng 3001) |
 
-Phạm vi: kiểm thử từ dưới lên: Database (M3) → Backend trên Database (M2 + M3) → Backend (M2). Tầng giao diện (M1) chưa thực hiện vì repo chưa có frontend.
+Phương pháp: kiểm thử từ dưới lên (Database → Backend trên Database → Backend → Giao diện), mỗi tầng có tiêu chí đạt riêng.
 
 ## 2. Kết quả theo tầng
 
-### Tầng 1 — Database (M3)
+### Tầng 1 — Database
 
 | Kiểm tra | Kết quả | Ghi chú |
 |---|---|---|
-| `docker compose up` lần đầu (volume trống) | **FAIL** | `migrate` thoát mã 1 với `ECONNREFUSED`, `api` không khởi động. Tái hiện được. Xem B01 |
-| Workaround: chạy `docker compose up -d` lần hai | Pass | `migrate` thoát mã 0, `api` lên, `/health` trả `ok` |
-| Áp migration trên DB trống (`topic4_test`) | Pass | Đủ 9 migration, guard `check-migration-history` báo tương thích với series M3 |
-| `prisma migrate status` | Pass | 9 migration, "Database schema is up to date" |
-| `prisma validate` | Pass | Schema hợp lệ |
-| `db:seed` chạy lần hai | Pass | Không lỗi, seed lặp lại được. Seed giữ nguyên mật khẩu đã có ("Existing passwords are preserved") |
-| `scripts/qa/db-checks.sql` | **5/5 PASS** | Fee snapshot bất biến, lịch sử chỉ thêm (DELETE bị chặn), cân nặng > 0, giá không âm, không xóa user có dữ liệu liên quan |
-| PostGIS, index, trigger | Pass | PostGIS 3.5; đủ 3 index (`one_active_assignment_per_shipment`, `one_active_assignment_per_driver`, `driver_location_gist`) và 2 trigger |
-| Seed | Pass | SENDER 1, DRIVER 2, DISPATCHER 1, ADMIN 1 |
-| Khoảng cách địa lý (PostGIS geography) | Pass | 4.315 m giữa hai điểm mẫu (kỳ vọng xấp xỉ 4.300 m) |
-| Dữ liệu còn sau `docker compose down` rồi `up -d` | Pass | Số đơn hàng giữ nguyên (2) |
+| Dựng từ DB trống, áp dụng migration | **Pass** | Đủ **12** migration, `migrate` thoát mã 0 ngay lần đầu |
+| Lỗi `ECONNREFUSED` ở lần chạy Compose đầu (B01) | **Đã sửa** | Retest trên `513f80a`: không còn lỗi (healthcheck dùng `pg_isready -h 127.0.0.1`) |
+| Dữ liệu còn sau `docker compose down` rồi `up -d` | **Pass** | Hệ thống lên lại, API healthy; dữ liệu cũ (lời giao việc của tài xế A) vẫn còn |
+| `scripts/qa/db-checks.sql` (ràng buộc, trigger, index, PostGIS) | Chưa chạy lại | Đã chạy trên `a2f7379`: 5/5 PASS. Cần chạy lại do thêm 2 migration |
 
-Giới hạn của kiểm tra: dòng "không xóa user có đơn" thực tế bị chặn bởi khóa ngoại của `RefreshSession`, không phải của `Shipment`. Ràng buộc FK của `Shipment` chưa được kiểm riêng.
-
-### Tầng 2 — Backend trên Database (M2 + M3)
+### Tầng 2 — Backend trên Database
 
 | Kiểm tra | Kết quả | Ghi chú |
 |---|---|---|
-| Integration test (`topic4_test`) | **23/23 pass** (46,5 s) | Tài liệu M3 ghi 22. Xem D01 |
-| `scripts/qa/smoke-flow.ps1` | **12/12 PASS** | Đặt đơn → tài xế gần nhất nhận → 3 lần chuyển trạng thái → tracking công khai |
-| Tracking công khai | Pass | Trả đúng 6 field, không lộ `senderId` |
-| Webhook receiver | Pass có ghi chú | 8 event cho 2 đơn (đủ 4 event/đơn). Xem B02, B03 |
-| `GET /health` | Pass | |
+| Integration test (PostgreSQL/PostGIS thật, DB `_test`) | **27/27 pass** | Gồm luồng đặt đơn→gán→giao→tracking→webhook, quyền riêng tư vị trí trực tiếp, điều hướng theo giai đoạn và geofence, đơn `IN_TRANSIT` cũ, giới hạn tần suất GPS |
+| Khởi động hệ thống (5 dịch vụ) | **Pass** | `db`, `migrate`, `api`, `web`, `receiver`; health `ok`, trang web trả 200 |
+| `scripts/qa/smoke-flow.ps1` (luồng 9 trạng thái, 43 kiểm tra) | **43/43 pass** | Geofence và kiểm tra GPS do máy chủ thực thi; hủy bắt buộc có lý do; tracking công khai không lộ dữ liệu riêng tư |
+| `scripts/qa/probe-sender-transition.ps1` (phân quyền chuyển trạng thái) | **7/7 bị chặn** | Người gửi (5 lần thử các trạng thái), tài xế không được giao và điều phối viên đều nhận 403; đơn giữ nguyên `RECEIVED` |
 
-### Tầng 3 — Backend (M2)
+### Tầng 3 — Backend và Frontend (kiểm thử tự động)
 
 | Kiểm tra | Kết quả |
 |---|---|
-| `lint`, `typecheck`, `build` | Sạch (kể cả test của M4) |
-| Test unit + HTTP của M2 | 105 pass (xác nhận con số M2 ghi) |
-| Test QA bổ sung của M4 | **118 pass** |
-| **Tổng** | **223 test pass, 9 suite** |
+| `lint`, `typecheck`, `build` | **Sạch** |
+| Test backend (Jest) | **405 pass, 12 suite**, 0 fail |
+| Test frontend (`npm run test:web`, Node test runner) | **52/52 pass** |
+| `npm audit --omit=dev` (phần chạy thật) | **0 lỗ hổng** |
+| `npm audit` (cả công cụ phát triển) | 46 lỗ hổng (1 nghiêm trọng, 39 cao, 6 trung bình), **đều nằm ở phần phát triển** |
+| `docker build`, `npm run openapi` + `git diff` | Chưa chạy lại trên `513f80a` |
+| CI | Workflow hiện chưa chạy `test:web` (xem F4) |
 
-Test QA của M4:
+Coverage theo cấu hình hiện tại của nhóm (chỉ đo `dispatch`, `pricing`/`routing`, `webhooks`):
 
-| File | Số test | Nội dung |
-|---|---|---|
-| `state-machine-matrix.spec.ts` | 18 | Cả 16 cặp trạng thái; `DELIVERED` là trạng thái cuối; trạng thái không tồn tại bị từ chối |
-| `rbac-matrix.spec.ts` | 75 | 15 endpoint × (không token + 4 vai trò): đúng 401/403 |
-| `auth-service.spec.ts` | 17 | Giới hạn 72 byte UTF-8, email chữ thường, bcrypt cost 12, hồ sơ tài xế, 409 trùng email, đăng nhập thất bại, refresh token chỉ lưu dạng SHA-256, xoay token, đăng xuất idempotent |
-| `shipments-service.spec.ts` | 8 | Thử lại khi trùng tracking code (tối đa 3 lần rồi 409); người gửi chỉ thấy đơn của mình; phân trang |
-
-Lưu ý phạm vi: test RBAC dùng service giả (mock) nên chỉ kiểm tra phân quyền ở tầng guard. Quyền sở hữu dữ liệu (người gửi A không xem được đơn của B) được kiểm bởi integration test của M2.
-
-### Coverage
-
-| File | Config M2 (3 service) | Đo đủ 5 service, trước test bổ sung | Sau test bổ sung |
-|---|---|---|---|
-| pricing.service.ts | 100 / 100 / 100 / 100 | 100 / 100 / 100 / 100 | 100 / 100 / 100 / 100 |
-| dispatch.service.ts | 99,07 / 92,5 / 100 / 100 | 99,07 / 92,5 / 100 / 100 | 99,07 / 92,5 / 100 / 100 |
-| webhooks.service.ts | 100 / 96 / 100 / 100 | 100 / 96 / 100 / 100 | 100 / 96 / 100 / 100 |
-| shipments.service.ts | không đo | 92,85 / 75 / 100 / 93,54 | 98,57 / 96,42 / 100 / 100 |
-| auth.service.ts | không đo | **30 / 0 / 14,28 / 26,31** | 100 / 100 / 100 / 100 |
-| common/security.ts | không đo | 100 / 100 / 100 / 100 | 100 / 100 / 100 / 100 |
-| **Tổng** | 99,5 / 94,87 / 100 / 100 | 90,25 / 78,83 / 89,47 / 89,64 | **99,42 / 96,35 / 100 / 100** |
-
-(Các cột là % Statements / Branches / Functions / Lines.) Con số 99,5% trong báo cáo của M2 chỉ tính 3 trong 5 service; xem D03.
-
-### Thăm dò đầu vào sai định dạng (negative testing)
-
-| Yêu cầu | Kết quả | Đánh giá |
-|---|---|---|
-| `GET /shipments?page=99999999999&limit=100` | 200 | Không lỗi. (Giả thuyết ban đầu "có thể trả 500" **không đúng**) |
-| `?page=0`, `?limit=101`, `?limit=abc`, `?status=FAILED` | 400 | Đúng |
-| `GET /shipments/not-a-uuid` | 400 | Đúng |
-| `GET /shipments/<uuid không tồn tại>` | 404 | Đúng |
-| `GET /tracking/AAAAAAAAAAAAAAAA` (đúng định dạng, không tồn tại) | 404 | Đúng |
-| `GET /tracking/short` | 400 | Đúng |
-| `GET /tracking/' OR 1=1--` | 400 | Chuỗi bị chặn bởi kiểm tra định dạng |
-| 12 lần đăng nhập sai liên tiếp | 10 lần 401, rồi 429 | Giới hạn tốc độ hoạt động đúng thiết kế (10 lần/phút) |
-
-Kết quả: 0 lỗi 500 trong tất cả các yêu cầu thăm dò.
-
-### Tầng 4 — Giao diện (M1)
-
-Chưa thực hiện: repo chưa có frontend (`apps/web`). Kế hoạch: viết E2E Playwright cho luồng đặt hàng và tra cứu tracking khi M1 có giao diện, thống nhất `data-testid` với M1.
-
-## 3. Lỗi và phát hiện
-
-| ID | Mức độ | Mô tả | Issue | Trạng thái |
+| File | % Statements | % Branch | % Functions | % Lines |
 |---|---|---|---|---|
-| B01 | Trung bình | Lần chạy Compose đầu tiên: `migrate` lỗi `ECONNREFUSED`, `api` không khởi động. Nghi ngờ do healthcheck `pg_isready` kiểm tra qua unix socket nên báo `healthy` khi TCP chưa mở. Gợi ý: `pg_isready -h 127.0.0.1 ...`. Workaround: chạy `up -d` lần hai | `#<số>` | Open |
-| B02 | Thấp–Trung bình | Đăng ký trùng URL tạo nhiều subscription; mỗi event có 2 delivery (đã xác nhận trên DB: 2 subscription, mỗi event 2 delivery). Receiver deduplicate nên không thấy | `#<số>` | Open |
-| B03 | Thấp (tài liệu) | Webhook đến sai thứ tự so với `occurredAt` (quan sát ở cả hai đơn), tài liệu chưa nói rõ không đảm bảo thứ tự | `#<số>` | Open |
-| D01 | Thấp (tài liệu) | README của M3 ghi 22 integration test, thực tế 23 | — | Ghi nhận |
-| D02 | Thấp | `npm ci` không tự tạo Prisma Client, người mới gặp lỗi TypeScript khó hiểu. Gợi ý `postinstall: prisma generate` hoặc ghi rõ trong README | — | Ghi nhận |
-| D03 | Thấp–Trung bình | Coverage tiêu đề (99,5%) không đo state machine (`shipments.service.ts`), `auth.service.ts` và `security.ts`. Khi đo đủ, `auth.service.ts` chỉ đạt 30% ở mức unit test. Gợi ý mở rộng `collectCoverageFrom` | — | Đã bổ sung test, chờ M2 mở rộng cấu hình |
+| dispatch.service.ts | 96,29 | 84,9 | 90 | 97,52 |
+| pricing.service.ts | 100 | 100 | 100 | 100 |
+| routing.service.ts | 95,06 | 91,37 | 100 | 94,73 |
+| webhooks.service.ts | 98,33 | 96 | 92,3 | 98,18 |
+| **Tổng** | **96,79** | **90,6** | **93,47** | **97,19** |
 
-Quan sát khác (không phải lỗi):
-- Mã tracking chỉ chấp nhận chữ hoa (chữ thường trả 400), cần báo M1 để giao diện tự chuyển chữ hoa.
-- Seed không ghi đè mật khẩu của user đã tồn tại. Nếu đổi `DEMO_PASSWORD` trong `.env` sau lần seed đầu thì mật khẩu đăng nhập vẫn là giá trị cũ, dễ gây lỗi 401 khó hiểu. Nên ghi rõ trong README.
+Lưu ý phạm vi: cấu hình coverage không đo `shipments.service.ts` (state machine) và `auth.service.ts`; hai file này được kiểm bằng test riêng của M4 (ma trận trạng thái, ma trận RBAC, `auth-service`, `shipments-service`). Test frontend kiểm tra logic JavaScript (client API, bản đồ, GPS), không phải E2E trình duyệt, và hiện chưa có E2E tự động.
 
-## 4. Kết luận và rủi ro còn lại
+### Tầng 4 — Giao diện (kiểm thử thủ công)
 
-- Database (M3) hoạt động đúng thiết kế ở mọi kiểm tra đã thực hiện; backend (M2) chạy đúng trên schema này (23/23 integration test và luồng giao hàng 12/12).
-- Điểm yếu đáng xử lý nhất: B01 (người mới chạy Compose lần đầu có thể không có API).
-- Rủi ro còn lại:
-  - Rate limiter lưu trong bộ nhớ, chỉ đúng khi chạy một instance (M2 đã tự ghi nhận).
-  - 34 cảnh báo `npm audit` ở dev dependencies (chủ yếu từ Jest 29.7), chưa xử lý, cần PR riêng.
-  - Máy kiểm thử dùng Node 24, CI và Docker dùng Node 22.22.3.
-  - Chưa đo coverage của integration test; chưa có E2E giao diện.
-  - Receiver demo deduplicate trong bộ nhớ; hệ thống bên ngoài cần lưu `eventId` bền vững.
+Nhóm xác nhận đã chạy các kịch bản demo trên giao diện (tạo đơn, ghim điểm, báo giá, điều phối, giao hàng, tra cứu) và không phát hiện lỗi chặn. **Chưa có bằng chứng đính kèm** (ảnh chụp, video, bảng test case). Khi điền, ghi theo mẫu: kịch bản, vai trò, kết quả, bằng chứng.
+
+## 3. Đối chiếu yêu cầu kiểm thử (SRS mục 4.1)
+
+| ID | Kết quả | Bằng chứng |
+|---|---|---|
+| QA-01 Unit test (phí, định tuyến, GPS, trạng thái, dispatch, webhook) | Đạt | 405 test backend pass |
+| QA-02 RBAC và quyền sở hữu | Đạt | Ma trận RBAC (21 endpoint), integration "blocks sender access to another sender shipment", probe phân quyền 7/7 |
+| QA-03 State machine | Đạt | Ma trận trạng thái, integration, smoke-flow 43/43 |
+| QA-04 Integration PostgreSQL/PostGIS | Đạt | 27/27 pass, 12 migration |
+| QA-05 Frontend (API client, bản đồ, GPS, luồng người gửi) | Đạt | 52/52 pass (không phải E2E trình duyệt) |
+| QA-06 Negative test | Đạt một phần | Smoke-flow: GPS sai (4 loại), thiếu token, sai vai trò, mã tracking sai định dạng, hủy thiếu lý do. **Chưa** kiểm chứng OTP bằng email thật (SMTP chưa cấu hình trên máy kiểm thử) |
+| QA-07 Quyền riêng tư dữ liệu | Đạt | Tracking công khai chỉ trả `trackingCode, status, createdAt, pickup, dropoff, history`, không có `senderId`, không có toạ độ tài xế; điều hướng trước khi lấy hàng không lộ điểm giao; xe không liên quan không xem được vị trí trực tiếp |
+| QA-08 Cổng chất lượng khi đổi code | Đạt một phần | lint, typecheck, build, test đều pass; `docker build` và kiểm tra `openapi.json` chưa chạy lại |
+| QA-09 Báo cáo | Đạt | Tài liệu này; còn các ô "chưa chạy lại" ở mục 7 |
+
+## 4. Ghi chú phương pháp: hai kiểm tra smoke thất bại ban đầu
+
+Ở lần chạy đầu, hai kiểm tra thất bại và từng bị nghi ngờ là lỗi phân quyền (người gửi nhận 200 khi gọi chuyển trạng thái). Điều tra kết luận **không phải lỗi hệ thống**:
+
+- Khi tài xế **nhận đơn**, hệ thống tự chuyển đơn từ `RECEIVED` sang `EN_ROUTE_PICKUP` (đúng với SRS 4.2 mục 4). Script ban đầu giả định đơn vẫn `RECEIVED` sau khi nhận.
+- API trả 200 "idempotent" cho chủ đơn khi đơn đã ở đúng trạng thái yêu cầu, nên người gửi nhận 200 mà không đổi trạng thái.
+- Bản script sửa kiểm tra phân quyền **trước** khi nhận đơn (khi đơn còn `RECEIVED`). Cả hai kiểm tra pass và probe độc lập xác nhận người gửi bị chặn 403 ở mọi trạng thái.
+
+Một kiểm tra khác ban đầu mong đợi 409 sau `DELIVERED` nhưng hệ thống trả 403 (tài xế không còn được giao việc). Cả hai đều chặn đúng; kỳ vọng đã được sửa (tài xế 403 hoặc 409, admin 409).
+
+## 5. Lỗi và phát hiện
+
+| ID | Mức độ | Mô tả | Trạng thái |
+|---|---|---|---|
+| B01 ([#2](https://github.com/HarryNgoFire/CNPM_Topic4/issues/2)) | Trung bình | Compose lần đầu: `migrate` lỗi `ECONNREFUSED`, `api` không lên | **Đã sửa, M4 đã retest** |
+| B02 ([#3](https://github.com/HarryNgoFire/CNPM_Topic4/issues/3)) | Thấp–Trung bình | Đăng ký webhook trùng URL tạo nhiều subscription, mỗi event gửi nhiều lần | Nhóm báo đã sửa; **M4 chưa retest** |
+| B03 ([#4](https://github.com/HarryNgoFire/CNPM_Topic4/issues/4)) | Thấp (tài liệu) | Tài liệu webhook không nêu rõ không đảm bảo thứ tự | Nhóm báo đã sửa; **M4 chưa retest** |
+| S01 | Cao nếu triển khai công khai; thấp khi chạy cục bộ | Giao diện (`apps/web/app.js`) **nhúng sẵn thông tin đăng nhập demo** (`sender@gmail.com`, `driver-a@gmail.com`, `dispatcher@gmail.com`, `admin@gmail.com`, mật khẩu `admin`) cùng nút đăng nhập 1 chạm, **bật mặc định** (chỉ tắt khi đặt cờ trong `localStorage`). Mật khẩu mặc định của tài khoản seed cũng là `admin` | Mở; cần quyết định cách xử lý |
+| S02 | Thấp–Trung bình | Access token và refresh token lưu trong `sessionStorage` (khoá `moveflow_session`) và được khôi phục khi tải lại trang, trong khi `USER_GUIDE.md` và kịch bản thuyết trình ghi "giữ trong bộ nhớ, không lưu localStorage, tải lại trang phải đăng nhập lại". Mọi script chạy trên trang đều đọc được (rủi ro XSS) | Mở; sửa tài liệu hoặc mã |
+| F3 | Thấp | Kịch bản thuyết trình lỗi thời: vòng đời 4 trạng thái (thực tế 9); "nhận đơn không làm đơn tự chuyển" (thực tế tự chuyển sang `EN_ROUTE_PICKUP`); "chưa có xử lý giao thất bại" (đã có `DELIVERY_FAILED`, `CANCELLED`); "không có geocoding" (giao diện đã có tìm địa chỉ) | Cần sửa trước khi trình bày |
+| F4 | Thấp | CI chưa chạy `npm run test:web` | Đề xuất bổ sung |
+| F5 | Thấp | Tài liệu mâu thuẫn nhau về số test (397/13 trong `DEVELOPER_REVIEW`, "349+/45" trong README, thực tế **405/52**); README ghi frontend Next.js/Playwright (thực tế HTML/JS thuần, chưa có Playwright); `HELPER.md` ghi cổng 3000 và `/docs` (thực tế 3001, `/api/docs`); sơ đồ state machine vẫn vẽ 4 trạng thái | Đề xuất cập nhật |
+| F6 | Thấp | 46 lỗ hổng `npm audit` ở phần phát triển (0 ở phần chạy thật); `npm ci` cần nhiều RAM, bị dừng vì hết bộ nhớ khi chạy cùng Docker Desktop | Ghi nhận |
+
+## 6. Rủi ro và hạn chế còn lại
+
+- Tính đường đi dùng OSRM công cộng (không có SLA, cần Internet); tìm địa chỉ dùng Nominatim công cộng (giới hạn 1 yêu cầu/giây).
+- Rate limiter lưu trong bộ nhớ, chỉ đúng khi chạy một instance.
+- Chưa có E2E tự động; chưa kiểm chứng gửi email OTP thật; chưa có script cho đường dẫn `DELIVERY_FAILED`.
+- Máy kiểm thử dùng Node 24, CI và Docker dùng Node 22.22.3.
+- Tài khoản demo mật khẩu `admin` chỉ phù hợp chạy cục bộ.
+
+## 7. Việc còn lại trước khi nộp
+
+1. Chạy lại `scripts/qa/db-checks.sql` trên `513f80a` và điền vào Tầng 1.
+2. Chạy `npm run openapi` rồi `git diff --exit-code -- docs/api/openapi.json`, và `docker build -f Dockerfile.api -t topic4-api .`; điền kết quả vào Tầng 3 và QA-08.
+3. Retest Issue #3, #4 và đóng Issue #2.
+4. Quyết định S01 và S02 với nhóm (sửa mã, hoặc ghi rõ trong tài liệu là chỉ cho demo cục bộ).
+5. Bổ sung bằng chứng cho kiểm thử thủ công (ảnh chụp, bảng test case).
