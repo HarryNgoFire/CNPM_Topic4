@@ -1,5 +1,7 @@
 # Ghi chú phần M3 — Database, Auth, State machine
 
+> **Tài liệu lịch sử:** Nội dung này ghi lại chuỗi migration M3 ban đầu (9 migration, 12 model trước email OTP) và kết quả kiểm thử tại thời điểm tích hợp. Repository hiện có thêm migration và model; dùng [schema Prisma](../../prisma/schema.prisma), [migrations](../../prisma/migrations) và [ERD hiện tại](../architecture/diagrams/erd.drawio) làm chuẩn.
+
 M3 tiếp nhận schema, migration, Auth/RBAC và state machine từ nền chạy thử của M2 (xem `docs/m2/BAN_GIAO_M2_CHO_M3.md`). Tài liệu này ghi lại những gì M3 đã thay đổi và việc các thành viên khác cần làm theo.
 
 ## Chuỗi migration
@@ -52,14 +54,14 @@ CI không bị ảnh hưởng vì mỗi lần chạy đều dùng database mới
 - Phần Prisma không biểu diễn được (geography, partial index, CHECK, trigger) viết tay trong `migration.sql`.
 - Chạy `npm run test:integration` trên database có tên kết thúc `_test` trước khi mở PR.
 
-## Sơ đồ
+## Sơ đồ ở snapshot M3
 
-| Sơ đồ                            | Nguồn chỉnh sửa (draw.io)                                  | Ảnh dùng cho báo cáo                                    |
-| -------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| ERD 12 bảng, ký pháp crow's-foot | `docs/architecture/diagrams/erd.drawio`                    | `docs/architecture/diagrams/erd.png`                    |
-| State machine vòng đời Shipment  | `docs/architecture/diagrams/shipment-state-machine.drawio` | `docs/architecture/diagrams/shipment-state-machine.png` |
+| Sơ đồ tại thời điểm M3 | Nguồn chỉnh sửa (draw.io) |
+| ---------------------- | ------------------------- |
+| ERD 12 bảng            | `docs/architecture/diagrams/erd.drawio` |
+| State machine Shipment | `docs/architecture/diagrams/shipment-state-machine.drawio` |
 
-Mở file `.drawio` bằng app.diagrams.net hoặc draw.io Desktop. Khi schema hoặc luồng transition thay đổi, sửa file `.drawio` và xuất lại PNG trong cùng commit.
+Các con số và sơ đồ tại đây là snapshot M3. Nguồn draw.io trong repository đã được cập nhật theo luồng và schema hiện tại; các file PNG cùng tên là ảnh xuất cũ, không dùng thay cho nguồn `.drawio`. Mở nguồn bằng app.diagrams.net hoặc draw.io Desktop để xem bản mới.
 
 ### Điểm khác so với mục 6.2 của tài liệu triển khai
 
@@ -79,4 +81,4 @@ Tài liệu triển khai mô tả 9 bảng ở mức khái niệm. Schema thực
 | M2         | Mục "Chuỗi migration"         | Tạo lại database local. Từ nay đổi schema bằng migration mới và gửi M3 review; không đưa lại file baseline cũ. |
 | M1         | `docs/api/openapi.json`       | Không phải sửa gì: hợp đồng API giữ nguyên.                                                                    |
 | M4         | Mục "Cách đã kiểm chứng"      | Workflow CI không cần sửa. Tạo lại `topic4_test` trên máy trước khi chạy integration test.                     |
-| Cả nhóm    | `docs/architecture/diagrams/` | Dùng `erd.png` và `shipment-state-machine.png` cho phần Architecture & UML của báo cáo.                        |
+| Cả nhóm    | `docs/architecture/diagrams/` | Dùng các nguồn `.drawio` đã cập nhật; cần xuất lại ảnh nếu báo cáo yêu cầu PNG. |

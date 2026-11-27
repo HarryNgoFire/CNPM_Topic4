@@ -1,107 +1,44 @@
-# MoveFlow Unified Map Architecture
+# Kiến trúc bản đồ MoveFlow
 
-## 1. Overview and Core Principles
+Tài liệu mô tả stack bản đồ trong repository hiện tại. Cấu hình có thể thay đổi theo `.env`, `compose.yaml`, `compose.maps.yaml` và các module API tương ứng.
 
-MoveFlow features an integrated, independent mapping and routing stack designed for last-mile delivery operations without commercial API vendor lock-in or recurring per-request licensing costs.
+## Thành phần
 
-```
-+-------------------------------------------------------------------------------+
-|                                MoveFlow Web SPA                               |
-|               (MapLibre GL v4.7.1 + GeoJSON Reactive Sources)                 |
-+-------------------------------------------------------------------------------+
-        |                                       |                        ^
-        | Geocoding Search & Reverse            | Route & State Sync     | Live Driver GPS
-        v                                       v                        |
-+-------------------------------------------------------------------------------+
-|                            MoveFlow API (NestJS)                              |
-|  - /api/v1/geocoding/search & /reverse                                        |
-|  - /api/v1/pricing/quote (OSRM routing + versioned pricing rules)             |
-|  - /api/v1/shipments/:id/navigation (Two-stage route & geofence evaluation)   |
-|  - /api/v1/shipments/:id/live (Authorized driver live location)               |
-|  - /api/v1/drivers/me/location (Throttled GPS ingestion)                      |
-+-------------------------------------------------------------------------------+
-        |                         |                         |
-        v                         v                         v
-+------------------+    +------------------+    +-------------------------------+
-|  OSRM Routing    |    |    Nominatim     |    |   PostGIS / PostgreSQL 16     |
-| (Driving Engine) |    | (Geocoding API)  |    | - Spatial ST_Distance/ST_DWithin |
-+------------------+    +------------------+    | - Row-level locked state machine |
-                                                +-------------------------------+
+```text
+Browser (SPA + MapLibre GL)
+       |
+       +-- /api/v1/geocoding/search, /reverse --> MoveFlow API --> Nominatim
+       +-- /api/v1/pricing/quote --------------> MoveFlow API --> OSRM
+       +-- shipment navigation/live, driver GPS -> MoveFlow API --> PostgreSQL/PostGIS
+       |
+       +-- map style/tiles --------------------> Nginx proxy --> TileServer GL (optional)
 ```
 
----
+- **Web:** vanilla JavaScript SPA; MapLibre GL 4.7.1 được vendored trong `apps/web/vendor/maplibre-gl`. Bản đồ booking cho phép chọn/kéo điểm lấy và giao; bản đồ tài xế hiển thị tuyến và trạng thái chuyến.
+- **Geocoding:** API proxy đến Nominatim qua `GEOCODER_BASE_URL`; search/reverse được chuẩn hóa và giới hạn bởi backend. Lỗi upstream được trả về dưới dạng lỗi dịch vụ, không tạo kết quả giả.
+- **Routing/pricing:** `RoutingService` gọi OSRM qua `OSRM_BASE_URL`, profile `driving`. Khoảng cách tuyến được dùng trong quote và phí shipment; không tự thay bằng đường chim bay khi không có tuyến.
+- **Vị trí:** PostgreSQL/PostGIS lưu vị trí tài xế; backend phân quyền live tracking và kiểm tra điều kiện GPS/geofence khi chuyển trạng thái.
+- **Tile server:** TileServer GL, OSRM và Nominatim có thể chạy bằng compose overlay. Các dataset không được commit cùng repo; phải tự chuẩn bị trước khi triển khai stack này.
 
-## 2. Component Architecture
+## Luồng giao hai chặng
 
-### A. Rendering Engine: MapLibre GL
-- Replaced legacy Leaflet with vendored **MapLibre GL (`v4.7.1`)** (`apps/web/vendor/maplibre-gl/`).
-- Reactive GeoJSON architecture:
-  - Three dedicated sources: `endpoints` (pickup A & dropoff B markers), `driver` (driver GPS puck with accuracy halo), and `route` (OSRM LineString geometry).
-  - Map instances are mounted once and updated reactively via `setData()`; maps and layers are never torn down and recreated on position changes.
+Luồng nghiệp vụ chính của tài xế:
 
-### B. Single Source of Truth for Routing: OSRM
-- All distance calculations, turn-by-turn routing, and fee estimations use **Project OSRM (driving profile)**.
-- Eliminates parallel distance calculators (e.g. Euclidean or Haversine differences vs road network).
-- Backend caches route geometries and distances to optimize throughput.
-
-### C. Self-Hosted Geocoding Proxy
-- `/api/v1/geocoding/search` and `/reverse` wrap Nominatim with:
-  - Vietnamese administrative hierarchy normalization (`house_number`, `road`, `ward`/`quarter`, `district`, `city`).
-  - Local in-memory caching (24 hours TTL, up to 1,000 items).
-  - 5-second timeout with resilient 503 fallback when geocoding is unavailable.
-
----
-
-## 3. Two-Stage Delivery Lifecycle & Geofence Protection
-
-MoveFlow enforces a strict two-stage state machine:
-
-```
-[RECEIVED / EN_ROUTE_PICKUP]
-          |
-          | Driver within 100m geofence (accuracy <= 50m, age <= 30s)
-          v
-   [ARRIVED_PICKUP]
-          |
-          | Driver confirms package receipt
-          v
-  [OUT_FOR_DELIVERY]
-          |
-          | Driver within 100m geofence (accuracy <= 50m, age <= 30s)
-          v
-   [ARRIVED_DROPOFF]
-          |
-          +---> [DELIVERED] (Success)
-          |
-          +---> [DELIVERY_FAILED] (Package undeliverable with recorded reason)
+```text
+RECEIVED
+  -> EN_ROUTE_PICKUP
+  -> ARRIVED_PICKUP
+  -> OUT_FOR_DELIVERY
+  -> ARRIVED_DROPOFF
+  -> DELIVERED
 ```
 
-### Route Isolation & Geofence Enforcement
-1. **Pickup-Before-Dropoff Isolation**: While a shipment is in phase `TO_PICKUP`, `/api/v1/shipments/:id/navigation` only provides driver $\to$ pickup A route geometry. Dropoff destination B and dropoff route geometry are never disclosed to the driver until pickup is confirmed.
-2. **Backend-Enforced Geofence**: Transitions to `ARRIVED_PICKUP` and `ARRIVED_DROPOFF` are strictly guarded by backend PostGIS spatial evaluation:
-   - Distance to destination $\le 100$ meters.
-   - GPS fix accuracy $\le 50$ meters.
-   - GPS timestamp age $\le 30$ seconds.
+Tại điểm lấy/giao, backend yêu cầu vị trí trong geofence 100 m cùng giới hạn độ chính xác/độ mới GPS. Chặng đến điểm giao chỉ được mở sau khi đã xác nhận đến điểm lấy và nhận hàng. Các trạng thái cuối còn gồm `CANCELLED` và `DELIVERY_FAILED`; chuyển trạng thái và quyền thực hiện được kiểm tra ở API. Xem [state machine](../architecture/diagrams/shipment-state-machine.drawio) và [SRS](../SRS.md).
 
----
+## Quyền riêng tư
 
-## 4. GPS Throttling & Rerouting
+- `GET /api/v1/shipments/:id/live` yêu cầu xác thực và kiểm tra vai trò/quyền sở hữu hoặc assignment.
+- `GET /api/v1/tracking/:trackingCode` là tra cứu công khai có response giới hạn; không chứa tọa độ GPS tài xế.
+- Dữ liệu điều hướng được trả theo giai đoạn giao hàng; frontend không phải ranh giới bảo vệ quyền truy cập.
 
-To prevent server flooding while maintaining responsive navigation, client-side GPS uploads follow adaptive throttling:
-- **Minimum Upload Interval**: 5 seconds.
-- **Minimum Distance Delta**: 15 meters.
-- **Stationary Heartbeat**: Exactly 1 upload every 60 seconds if stationary.
-- **Off-Route Detection**: Evaluated against the active route using 75-meter perpendicular distance. If off-route persists for $\ge 20$ seconds, the client automatically requests route recalculation.
-
----
-
-## 5. Security & Privacy
-
-1. **Live Tracking Authorization (`GET /api/v1/shipments/:id/live`)**:
-   - Only the shipment owner (Sender), assigned Driver, Dispatcher, and Admin are authorized. Unrelated accounts receive `403 Forbidden`.
-   - Driver location coordinates are wiped and returned as `null` as soon as the shipment enters any terminal state (`DELIVERED`, `DELIVERY_FAILED`, `CANCELLED`).
-   - Public tracking (`/api/v1/tracking/:code`) exposes lifecycle timestamps only and never returns driver coordinates.
-2. **Content Security Policy (CSP)**:
-   - Nginx enforces strict CSP restricting script, style, worker, and map asset loading to same-origin and self-hosted services.
-3. **Proxy Trust**:
-   - NestJS adapter configures `trust proxy` for client IP rate limiting behind reverse proxies.
+Tile, geocoding và routing phụ thuộc dịch vụ/cấu hình môi trường. Máy chủ public không có SLA; xem [hướng dẫn vận hành](operations.md).

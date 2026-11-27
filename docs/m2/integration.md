@@ -1,5 +1,7 @@
 # Ghi chú tích hợp M2 với nhóm
 
+> **Tài liệu lịch sử:** Ghi lại trạng thái tích hợp M2/M3 tại tháng 10/2026. Cấu trúc migration, API và giao diện đã tiếp tục thay đổi; dùng [README](../../README.md), [SRS](../SRS.md) và [OpenAPI hiện tại](../api/openapi.json) làm tài liệu chuẩn.
+
 > Cập nhật 12/10/2026: đã đồng bộ 9 migration của M3; xem [M3_INTEGRATION.md](M3_INTEGRATION.md) trước khi chạy trên DB từng dùng baseline M2. Schema/API/Auth không đổi.
 M2 sở hữu PricingModule, DispatchModule và WebhooksModule. Shipment/Tracking API cũng được triển khai theo kế hoạch tuần trong tài liệu Word. Auth, Prisma schema và state machine là baseline hỗ trợ chạy thử, cần M3 xác nhận trước khi nhóm merge vào nhánh tích hợp.
 

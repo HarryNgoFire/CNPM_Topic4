@@ -1,41 +1,38 @@
-# Developer review và các lỗi đã xử lý
+# Trạng thái triển khai và giới hạn hiện tại
 
-## Các khuyết điểm đã xử lý trong bản này
+Tài liệu này tóm tắt phạm vi được triển khai trong repository MoveFlow. Hướng dẫn chạy nằm ở [README](../README.md); yêu cầu chi tiết ở [SRS](SRS.md).
 
-1. **Không có frontend chạy được**: thêm `apps/web` là SPA responsive, served qua Nginx trong Compose.
-2. **Đăng ký/đăng nhập chưa xác minh email**: thêm cột `User.emailVerified`, bảng `EmailVerificationCode`, OTP hash, hạn 10 phút, giới hạn 5 lần thử và endpoint verify/resend.
-3. **Có thể tự đăng ký DRIVER từ endpoint công khai**: DTO đăng ký không nhận role; service luôn tạo `SENDER`. Tài khoản quản trị/tài xế chỉ được cấp riêng.
-4. **Thiếu giao diện hồ sơ và quản lý tài khoản**: thêm API `users/me`, cập nhật tên, đổi mật khẩu, danh sách tài khoản admin và khóa/mở khóa account. Khóa account thu hồi refresh sessions.
-5. **OTP provider thất bại có thể để lại tài khoản mồ côi**: đăng ký xóa account mới tạo nếu gửi code thất bại; resend có cooldown.
-6. **Không có luồng UI cho công việc tài xế**: thêm nhận/từ chối assignment, cập nhật trạng thái và điều hướng MapLibre GL 2 chặng.
-7. **Không có hướng dẫn tích hợp các phần**: thêm `USER_GUIDE.md`, `EMAIL_OTP_SETUP.md` và Compose service frontend.
-8. **Bản đồ phân mảnh và thiếu cơ chế Geofence**: Đã thay thế toàn bộ Leaflet bằng MapLibre GL v4.7.1, chuẩn hóa định tuyến OSRM, quy trình giao hàng hai chặng có Geofence 100m, bảo mật vị trí tài xế (live tracking), và cung cấp stack bản đồ tự lưu trữ tùy chọn (`compose.maps.yaml`). Đạt 100% kiểm thử (397 tests backend, 13 tests frontend). Xem chi tiết tại [docs/maps/architecture.md](maps/architecture.md) và [docs/maps/verification.md](maps/verification.md).
+## Chức năng đã có trong mã nguồn
 
-## Rủi ro còn tồn tại / nên giải quyết tiếp
+- SPA cho các vai trò SENDER, DRIVER, DISPATCHER và ADMIN; responsive web app được phục vụ bằng Nginx.
+- Xác thực email OTP, access/refresh session, hồ sơ người dùng và quản trị tài khoản.
+- Báo giá OSRM, tạo shipment và snapshot phí; điều phối tự động/thủ công và nhận/từ chối assignment.
+- Luồng giao hai chặng, GPS tài xế, geofence, navigation, live tracking có phân quyền và tracking công khai giới hạn dữ liệu.
+- Phiên bản pricing rule, webhook HMAC/retry, geocoding proxy và health endpoint.
+- PostgreSQL/PostGIS, Prisma migrations, test backend và test frontend.
 
-- OSRM public demo chỉ phù hợp demo học tập; production nên tự host hoặc dùng routing provider có SLA và thỏa thuận quota.
-- OSRM driving profile không phải routing xe máy chuyên biệt; giá và tuyến có thể khác Google Maps.
-- Người gửi ghim thủ công cả điểm lấy và điểm giao; OSRM tính quãng đường đường bộ theo hai tọa độ đó.
-- Không có MFA yêu cầu OTP ở mọi lần đăng nhập; OTP hiện dùng để xác minh email lần đầu.
-- Admin đầu tiên được khởi tạo qua seed. Cần quy trình bootstrap quản trị an toàn (không dùng demo password) trước khi triển khai thực.
-- Chưa có reset password qua email, kiểm thử E2E qua trình duyệt, giám sát/alert, backup tự động hoặc external secrets manager.
-- Frontend đã tự làm mới access token một lần bằng refresh-token rotation; cần kiểm thử E2E khi access token hết hạn và khi tài khoản bị khóa.
-- Một số workflow nghiệp vụ cần hoàn thiện trước production: giao thất bại/hủy/hoàn hàng, COD, bằng chứng giao, xử lý mất mạng, đối soát phí.
+Các endpoint và response hiện hành được mô tả trong [OpenAPI](api/openapi.json). Schema database nằm ở `prisma/schema.prisma`; sơ đồ được lưu trong [architecture/diagrams](architecture/diagrams).
 
-## Kiểm thử
+## Giới hạn và lưu ý vận hành
 
-- Đã kiểm tra cú pháp JavaScript frontend bằng `node --check` và parse cấu hình/ngữ nghĩa file tĩnh.
-- Cập nhật test auth theo hành vi public signup mới và fixture email verified.
-- Trong môi trường tạo bản giao này, dependencies ở `apps/api/node_modules` chưa đầy đủ và npm registry không phản hồi kịp; vì thế chưa xác nhận được `npm run typecheck`, Jest, build Docker hoặc luồng email thật. Phải chạy các lệnh ở mục dưới trong môi trường có mạng trước khi xem là production-ready.
+- OSRM mặc định dùng profile `driving`; tuyến và khoảng cách không phải tuyến xe máy chuyên biệt.
+- OSRM/Nominatim public và SMTP bên ngoài có thể gián đoạn/quota; không có SLA production mặc định.
+- Stack tile/OSRM/Nominatim tự lưu trữ là tùy chọn. Dataset chưa được đưa vào repository và cần chuẩn bị riêng.
+- Demo seed và Demo Tools dành cho local/testing; không dùng tài khoản, secret hoặc GPS giả lập demo trong production.
+- Chưa có thanh toán/COD, bằng chứng giao hàng, quy trình hoàn hàng, reset mật khẩu qua email, MFA bắt buộc ở mỗi lần đăng nhập hay E2E trình duyệt đầy đủ.
+- Chưa có cấu hình production đầy đủ cho giám sát, alerting, backup/restore và quản lý secret tập trung.
 
-## Checklist xác nhận trước demo
+## Lệnh xác minh
+
+Chạy các lệnh từ thư mục gốc; integration test cần database test riêng:
 
 ```bash
-npm ci
-npm run db:generate
+npm run lint
 npm run typecheck
-npm test
 npm run build
+npm test
+npm run test:web
+npm run test:integration
 ```
 
-Sau đó kiểm thử Docker sạch trong database demo riêng, tạo tài khoản Gmail thật, xác minh OTP, đăng nhập sai mật khẩu, OTP hết hạn/sai nhiều lần, khóa user, tạo đơn, điều phối tài xế và chuyển trạng thái hoàn tất.
+Kết quả chạy trước đây trong các tài liệu `docs/m2`, `docs/m3`, `docs/m4` là snapshot lịch sử, không được xem là kết quả xác minh cho code hiện tại. Chỉ ghi nhận build/test là đã pass sau khi chạy lại trên commit cần phát hành.

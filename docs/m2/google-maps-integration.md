@@ -1,5 +1,7 @@
 # Tính phí theo khoảng cách đường bộ bằng OSRM và mở Google Maps chỉ đường
 
+> **Tài liệu lịch sử:** Phần tích hợp Google Maps URLs và giao diện được mô tả ở đây không còn là hướng dẫn cho phiên bản web hiện tại. Ứng dụng hiện dùng MapLibre và điều hướng hai chặng tích hợp; xem [kiến trúc bản đồ](../maps/architecture.md), [README](../../README.md) và [OpenAPI](../api/openapi.json).
+
 Bản backend dùng hai cơ chế tách biệt:
 
 1. **OSRM Route API**: lấy khoảng cách theo mạng lưới đường để đưa vào công thức tính phí. Không cần API key hoặc Google Cloud billing.
