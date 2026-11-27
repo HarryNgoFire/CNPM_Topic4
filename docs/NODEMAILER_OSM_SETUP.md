@@ -1,25 +1,41 @@
-# MoveFlow: Nodemailer + OpenStreetMap + OSRM
+# Tích hợp email OTP và dịch vụ bản đồ
 
-## Gmail SMTP OTP (no purchased domain)
-1. Enable Google 2-Step Verification for sender Gmail.
-2. Google Account > Security > App passwords (only shown for eligible accounts); create an App Password. This is NOT your regular Gmail password.
-3. Copy `.env.example` to `.env`, set `SMTP_USER`, `SMTP_APP_PASSWORD`, `EMAIL_FROM`, `OTP_SECRET`, `JWT_SECRET`. Keep secrets out of Git.
-4. Run `docker compose up --build -d`. Test register/OTP via the web UI.
-5. For local-only testing use `EMAIL_DELIVERY_MODE=console` (not in production). Check `docker compose logs api` for OTP.
+Tài liệu tham khảo nhanh cho các tích hợp ngoài đang được dùng trong MoveFlow. Hướng dẫn cài đặt chính thức nằm trong [USER_GUIDE](USER_GUIDE.md), [Email OTP](EMAIL_OTP_SETUP.md) và [Maps Operations](maps/operations.md).
 
-SMTP Gmail: smtp.gmail.com:465/TLS. Gmail can enforce quotas, block automated mail and may not expose App Passwords on managed accounts. This is appropriate for low-volume demos, not high-volume transactional delivery.
+## Email xác minh
 
-## Accurate map pins
-- Creating a shipment requires manually selecting both pickup and delivery points on the OpenStreetMap picker. Coordinates are never pre-filled with example pins.
-- OpenStreetMap tiles supply map visualization; OSRM calculates driving ROAD distances using the selected coordinates (not motorbike-specific). OSRM public demo is not production SLA and can differ from Google Maps motorbike paths.
-- The driver workspace offers Google Maps navigation. Sender shipment detail no longer offers navigation. The backend also only returns navigation URLs on driver detail retrieval; driver tasks already include navigation.
-- Existing shipments with bad stored coordinates are NOT auto-corrected: create new shipments with accurate pins or separately migrate/correct existing addresses.
+Backend gửi OTP qua Nodemailer và SMTP. Với Gmail, dùng Google App Password; không dùng mật khẩu đăng nhập Gmail thông thường. Các biến cấu hình nằm trong `.env.example`:
 
-## Commands
-```powershell
-Copy-Item .env.example .env
-docker compose up --build -d
-docker compose logs --tail=100 api
+```dotenv
+EMAIL_DELIVERY_MODE=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=youraccount@gmail.com
+SMTP_APP_PASSWORD=your_google_app_password
+EMAIL_FROM="MoveFlow <youraccount@gmail.com>"
+OTP_SECRET=replace-with-a-random-secret-at-least-32-characters
 ```
 
-The project Dockerfile uses `npm install` so it can resolve Nodemailer despite the previous lockfile. After a successful install on an Internet-connected machine, commit the regenerated `package-lock.json`; then you can switch Dockerfile back to `npm ci` for reproducibility. Third-party tile and routing servers require Internet and should be self-hosted for production scale.
+Chế độ `console` chỉ dành cho phát triển không-production. Xem [hướng dẫn thiết lập OTP](EMAIL_OTP_SETUP.md) để biết luồng đăng ký/xác minh và lưu ý bảo mật.
+
+## Tuyến đường và geocoding
+
+- **OSRM:** backend dùng endpoint `OSRM_BASE_URL` để lấy tuyến đường và khoảng cách; profile là `driving`. Không cần API key với máy chủ demo công khai, nhưng máy chủ đó không có SLA. Lỗi tuyến được thể hiện rõ, không thay thế bằng khoảng cách đường thẳng.
+- **Nominatim:** backend dùng `GEOCODER_BASE_URL` cho tìm kiếm và reverse geocoding; giới hạn thời gian chờ được cấu hình qua `GEOCODER_TIMEOUT_MS`.
+- **Bản đồ web:** frontend dùng MapLibre GL và style URL do cấu hình web/Nginx cung cấp. TileServer GL chỉ có trong compose overlay tự lưu trữ; dataset cần được chuẩn bị riêng.
+
+Không có yêu cầu hay cấu hình để dùng Google Maps làm dịch vụ tính phí/định tuyến trong ứng dụng hiện tại. OSRM profile `driving` không đảm bảo tương đương tuyến xe máy.
+
+## Khởi động
+
+Tạo `.env` từ `.env.example`, cập nhật thông tin SMTP và secret, sau đó chạy:
+
+```bash
+docker compose up --build -d
+```
+
+Nếu vừa thay đổi `.env`, tạo lại API:
+
+```bash
+docker compose up -d --force-recreate api
+```

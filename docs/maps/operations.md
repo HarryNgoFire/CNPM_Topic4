@@ -1,106 +1,53 @@
-# MoveFlow Map Operations Guide
+# Vận hành bản đồ MoveFlow
 
-## 1. Operating Modes
+## Chế độ mặc định
 
-MoveFlow can operate in two primary deployment topologies:
+`.env.example` cấu hình OSRM công khai tại `https://router.project-osrm.org` và Nominatim công khai tại `https://nominatim.openstreetmap.org`. Đây là các dịch vụ best-effort, chịu quota/chính sách sử dụng riêng và không có SLA. OSRM dùng profile `driving`, không phải tuyến xe máy.
 
-### Mode A: Lightweight / Hosted Backend Mode (Default)
-In this mode, MoveFlow uses public/shared OSRM and Nominatim endpoints, which is suitable for local development, testing, and low-volume staging.
-- `OSRM_BASE_URL=https://router.project-osrm.org`
-- `GEOCODER_BASE_URL=https://nominatim.openstreetmap.org`
+Các biến liên quan:
 
-### Mode B: Fully Self-Hosted Air-Gapped Mode
-In this mode, all routing, geocoding, and map tile serving run within the local Docker network via `compose.maps.yaml`:
-- `OSRM_BASE_URL=http://osrm:5000`
-- `GEOCODER_BASE_URL=http://nominatim:8080`
-- Nginx proxies vector tiles via `http://localhost:3005/maps/`
+| Biến | Mục đích |
+|---|---|
+| `OSRM_BASE_URL` | Endpoint OSRM mà backend dùng để lấy tuyến |
+| `OSRM_ROUTE_TIMEOUT_MS` | Timeout request định tuyến |
+| `GEOCODER_BASE_URL` | Endpoint Nominatim dùng cho search/reverse |
+| `GEOCODER_TIMEOUT_MS` | Timeout geocoding |
+| `GEOCODER_VIEWBOX` | Khu vực ưu tiên kết quả geocoding |
 
----
+Sau khi sửa `.env`, tạo lại container API để nhận cấu hình mới:
 
-## 2. Docker Compose Management
-
-### Starting Services
 ```bash
-# Standard application services only
-docker compose up -d
-
-# Application + Self-Hosted Map Stack
-docker compose -f compose.yaml -f compose.maps.yaml up -d
+docker compose up -d --force-recreate api
 ```
 
-### Checking Configuration & Health
+## Stack tự lưu trữ tùy chọn
+
+`compose.maps.yaml` thêm TileServer GL, OSRM và Nominatim vào stack. Dùng các endpoint trong mạng Compose:
+
+```dotenv
+OSRM_BASE_URL=http://osrm:5000
+GEOCODER_BASE_URL=http://nominatim:8080
+```
+
+Khởi chạy hoặc kiểm tra cấu hình Compose:
+
 ```bash
-# Validate Compose files
 docker compose -f compose.yaml -f compose.maps.yaml config
-
-# Check container health status
-docker compose ps
+docker compose -f compose.yaml -f compose.maps.yaml up -d
+docker compose -f compose.yaml -f compose.maps.yaml ps
 ```
 
-Healthcheck endpoints:
-- **API**: `http://localhost:3001/api/v1/health`
-- **TileServer GL**: `http://localhost:8080/health` (internal)
-- **OSRM**: Port 5000 (TCP probe)
-- **Nominatim**: `http://localhost:8080/status` (internal)
+> **Cần chuẩn bị dữ liệu trước:** thư mục `infra/maps/*/data` hiện chỉ có `.gitkeep`. Cấu hình TileServer yêu cầu `infra/maps/tileserver/data/hcmc.mbtiles`; OSRM cần graph đã build tại `infra/maps/osrm/data/map.osrm` và các file đi kèm; Nominatim cần import OSM extract vào volume của nó. Các dataset không được tải/tạo tự động bởi Compose và không được chứa trong repository.
 
----
+Stack TileServer được cấu hình cho vùng bbox `105.8, 10.3, 107.4, 11.4`. Ngoài vùng dữ liệu, tile hoặc tuyến có thể không khả dụng. Hãy chuẩn bị extract phù hợp với cả cấu hình style/tile server, OSRM graph và Nominatim; xác minh dịch vụ riêng trước khi cấu hình API sang self-hosted endpoints.
 
-## 3. Dataset Maintenance & Ingestion (HCMC Regional Extract)
+## Kiểm tra và xử lý sự cố
 
-MoveFlow's self-hosted map stack is optimized for the **Ho Chi Minh City Metropolitan Area** (`bbox: 105.8,10.3,107.4,11.4`), reducing RAM from ~8.5 GB down to ~750 MB - 1.0 GB.
+- **API health:** `http://localhost:3001/api/v1/health`.
+- **API logs:** `docker compose logs --tail=100 api`.
+- **Map tile lỗi/404:** kiểm tra TileServer GL, file MBTiles, style `infra/maps/tileserver/styles/moveflow.json` và route proxy trong `apps/web/nginx.conf`.
+- **Geocoding lỗi:** kiểm tra `GEOCODER_BASE_URL`, log API, timeout và khả năng truy cập Nominatim.
+- **Báo giá không có tuyến:** kiểm tra tọa độ ghim, `OSRM_BASE_URL` và tình trạng OSRM. API sẽ báo lỗi thay vì tính khoảng cách đường thẳng.
+- **Geofence từ chối:** kiểm tra GPS được cập nhật mới, độ chính xác nằm trong giới hạn và thiết bị đang trong vòng 100 m quanh đích.
 
-### Regional Data Workflow
-
-1. **Preflight Check**:
-   ```bash
-   node scripts/prepare-hcmc-map-data.mjs
-   ```
-
-2. **Clip to HCMC Metro Bounding Box**:
-   ```bash
-   docker run --rm -v "$(pwd)/infra/maps/nominatim/data:/data" \
-     stefda/osmium-tool:latest extract \
-     --bbox 105.8,10.3,107.4,11.4 \
-     /data/vietnam-latest.osm.pbf \
-     -o /data/hcmc-surroundings.osm.pbf --overwrite
-   ```
-
-3. **Rebuild OSRM MLD Graph**:
-   ```bash
-   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
-     -v "$(pwd)/infra/maps/nominatim/data:/source:ro" \
-     ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-extract \
-     -p /opt/car.lua /source/hcmc-surroundings.osm.pbf
-
-   mv infra/maps/osrm/data/hcmc-surroundings.osrm infra/maps/osrm/data/map.osrm
-
-   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
-     ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-partition /data/map.osrm
-
-   docker run --rm -v "$(pwd)/infra/maps/osrm/data:/data" \
-     ghcr.io/project-osrm/osrm-backend:v5.27.1 osrm-customize /data/map.osrm
-   ```
-
-4. **Restart OSRM Container**:
-   ```bash
-   docker compose -f compose.yaml -f compose.maps.yaml restart osrm
-   ```
-
----
-
-## 4. Troubleshooting & Common Operational Errors
-
-### Geocoding Service Unavailable (503)
-- **Symptom**: Client receives `503 Service Unavailable` on `/api/v1/geocoding/search`.
-- **Cause**: `GEOCODER_BASE_URL` is empty, or the upstream Nominatim service timed out (>5 seconds).
-- **Remediation**: Check Nominatim logs with `docker compose logs nominatim`. The system gracefully falls back to direct manual coordinate selection on the map.
-
-### Geofence Arrival Rejection (409)
-- **Symptom**: Driver transitions to `ARRIVED_PICKUP` or `ARRIVED_DROPOFF` fail with `409 Conflict`.
-- **Cause**: Driver GPS coordinates are $>100$ meters from destination, accuracy is $>50$ meters, or GPS timestamp is $>30$ seconds old.
-- **Remediation**: In the driver app UI, verify device GPS signal. Ensure high-accuracy location mode is enabled in the mobile browser.
-
-### Map Tile 404 / Grey Background
-- **Symptom**: MapLibre initializes with a solid background and tiles fail to render.
-- **Cause**: `vietnam.mbtiles` is missing in `infra/maps/tileserver/data/`, or Nginx `/maps/` location block is not properly proxying to `tileserver:8080`.
-- **Remediation**: Verify `infra/maps/tileserver/config.json` paths and ensure `compose.maps.yaml` is included when running Docker Compose.
+Chi tiết thành phần và luồng điều hướng ở [kiến trúc bản đồ](architecture.md); giới hạn dịch vụ ngoài được ghi trong [hướng dẫn người dùng](../USER_GUIDE.md).

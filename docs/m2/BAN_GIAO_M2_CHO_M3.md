@@ -1,5 +1,7 @@
 # Bàn giao M2 cho M3 — CNPM Topic 4
 
+> **Tài liệu bàn giao lịch sử:** Mô tả baseline tháng 10/2026, không phải trạng thái triển khai hiện tại. Dùng [README](../../README.md), [SRS](../SRS.md), [USER_GUIDE](../USER_GUIDE.md) và [OpenAPI](../api/openapi.json) để tham khảo phiên bản hiện hành.
+
 > Cập nhật 12/10/2026: đã đồng bộ 9 migration của M3; xem [M3_INTEGRATION.md](M3_INTEGRATION.md) trước khi chạy trên DB từng dùng baseline M2. Schema/API/Auth không đổi.
 Ngày: 11/10/2026. Repo: https://github.com/HarryNgoFire/CNPM_Topic4. Nhánh: `feature/m2-backend-services`. Baseline main: `e35a1de`. Tài liệu này đi cùng code trên nhánh; đọc thêm `docs/m2/README.md`, `integration.md`, `verification.md` và `docs/api/openapi.json`.
 

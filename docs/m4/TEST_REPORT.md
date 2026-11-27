@@ -1,5 +1,7 @@
 # Báo cáo kiểm thử — M4 (QA)
 
+> **Báo cáo snapshot lịch sử:** Kết quả được chạy ngày 2026-10-18 trên commit/nhánh ghi dưới đây, trước khi hoàn thiện frontend hiện tại. Các số liệu và nhận xét như “repo chưa có frontend” không mô tả code hiện giờ. Hãy chạy lại lệnh tại [README](../../README.md) để xác minh phiên bản đang dùng.
+
 ## 1. Thông tin lần chạy
 
 | Mục | Giá trị |

@@ -5,6 +5,7 @@
 ## 1. Chức năng hiện có
 
 ### Khách hàng
+
 - Đăng ký bằng email cá nhân, xác minh email bằng OTP 6 chữ số rồi mới được đăng nhập.
 - Đăng nhập, đăng xuất, xem hồ sơ, cập nhật tên và đổi mật khẩu.
 - Tạo đơn giao nhận với bản đồ trực quan MapLibre GL: tìm kiếm gợi ý địa chỉ tự động, kéo thả ghim A (lấy hàng) và ghim B (giao hàng), tự động điền GPS cho điểm lấy hàng.
@@ -13,6 +14,7 @@
 - Tra cứu hành trình công khai bằng mã vận đơn an toàn (không để lộ tọa độ tài xế ra ngoài).
 
 ### Quản lý / điều phối
+
 - Xem tổng quan đơn hàng, đơn cần phân công và trạng thái.
 - Xem danh sách tài khoản, tạo tài khoản tài xế/điều phối có xác minh email, khóa/mở khóa tài khoản (ADMIN).
 - Điều phối tự động đơn đang chờ (ADMIN/DISPATCHER).
@@ -20,6 +22,7 @@
 - Quản lý hồ sơ và đổi mật khẩu của tài khoản quản lý.
 
 ### Tài xế
+
 - Xem công việc được phân công, nhận/từ chối đơn.
 - Cập nhật trạng thái sẵn sàng/ngoại tuyến và cập nhật tọa độ GPS.
 - Dẫn đường tương tác 2 chặng trực tiếp trên ứng dụng (MapLibre GL):
@@ -45,16 +48,16 @@
 
 Các biến quan trọng:
 
-| Biến | Mục đích |
-|---|---|
-| `POSTGRES_PASSWORD` | Mật khẩu PostgreSQL chạy trong Docker |
-| `JWT_SECRET` | Ký access token; chuỗi ngẫu nhiên dài ít nhất 32 ký tự |
-| `OTP_SECRET` | Secret riêng dùng để băm OTP; không dùng chung secret production với môi trường khác |
-| `EMAIL_DELIVERY_MODE` | `smtp` để gửi email thật qua Gmail; `console` chỉ dùng local development |
-| `SMTP_USER` | Gmail dùng làm địa chỉ gửi OTP |
-| `SMTP_APP_PASSWORD` | Google App Password 16 ký tự; không phải mật khẩu Gmail thường |
-| `EMAIL_FROM` | Địa chỉ Gmail gửi OTP, thường trùng với `SMTP_USER` |
-| `OSRM_BASE_URL` | Máy chủ routing OSRM; mặc định là máy chủ demo công khai |
+| Biến                   | Mục đích                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `POSTGRES_PASSWORD`   | Mật khẩu PostgreSQL chạy trong Docker                                                         |
+| `JWT_SECRET`          | Ký access token; chuỗi ngẫu nhiên dài ít nhất 32 ký tự                                  |
+| `OTP_SECRET`          | Secret riêng dùng để băm OTP; không dùng chung secret production với môi trường khác |
+| `EMAIL_DELIVERY_MODE` | `smtp` để gửi email thật qua Gmail; `console` chỉ dùng local development               |
+| `SMTP_USER`           | Gmail dùng làm địa chỉ gửi OTP                                                             |
+| `SMTP_APP_PASSWORD`   | Google App Password 16 ký tự; không phải mật khẩu Gmail thường                           |
+| `EMAIL_FROM`          | Địa chỉ Gmail gửi OTP, thường trùng với `SMTP_USER`                                    |
+| `OSRM_BASE_URL`       | Máy chủ routing OSRM; mặc định là máy chủ demo công khai                                |
 
 ## 4. Khởi động bằng Docker
 
@@ -67,9 +70,9 @@ docker compose ps
 
 Lần đầu, Compose build API, đợi PostgreSQL khỏe, chạy migrations và khởi động frontend. Sau đó truy cập:
 
-- Web app: <http://localhost:3005>
-- API health: <http://localhost:3001/api/v1/health>
-- Swagger: <http://localhost:3001/api/docs>
+- Web app: [http://localhost:3005](http://localhost:3005)
+- API health: [http://localhost:3001/api/v1/health](http://localhost:3001/api/v1/health)
+- Swagger: [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
 
 Để xem log:
 
@@ -84,12 +87,13 @@ Nếu đây là môi trường demo cục bộ và cần các tài khoản mẫu
 docker compose run --rm migrate npm run db:seed
 ```
 
-Seed tạo tài khoản mẫu: `sender@gmail.com`, `driver-a@gmail.com`, `driver-b@gmail.com`, `dispatcher@gmail.com`, `admin@gmail.com`. Mật khẩu mặc định là `admin` (đặt bằng `DEMO_PASSWORD`); seed cập nhật lại mật khẩu mỗi lần chạy. Các tài khoản mẫu đã được đánh dấu xác minh để demo, nên không nhận OTP. Địa chỉ này chỉ là tài khoản đăng nhập trong cơ sở dữ liệu local, không đảm bảo là hộp thư Gmail có thật. Không dùng tài khoản/mật khẩu demo trong production.
+Seed tạo tài khoản mẫu: `sender@gmail.com`, `driver-a@gmail.com`, `driver-b@gmail.com`, `dispatcher@gmail.com`, `admin@gmail.com`. Trên database mới, mật khẩu mặc định là `admin` (có thể đặt bằng `DEMO_PASSWORD`). Seed không đặt lại mật khẩu của tài khoản mẫu canonical đã tồn tại; nếu đổi `DEMO_PASSWORD` sau khi tạo user, mật khẩu cũ vẫn được giữ. Các tài khoản mẫu đã được đánh dấu xác minh để demo, nên không nhận OTP. Địa chỉ này chỉ là tài khoản đăng nhập trong cơ sở dữ liệu local, không đảm bảo là hộp thư Gmail có thật. Không dùng tài khoản/mật khẩu demo trong production.
 
 ## 5. Cách dùng cơ bản
 
 ### Đăng ký khách hàng
-1. Mở <http://localhost:3005>, chọn **Tạo tài khoản**.
+
+1. Mở [http://localhost:3005](http://localhost:3005), chọn **Tạo tài khoản**.
 2. Nhập họ tên, email bạn có thể truy cập và mật khẩu tối thiểu 10 ký tự.
 3. Mở hộp thư (kiểm tra Spam/Quảng cáo), nhập OTP 6 chữ số trong vòng 10 phút.
 4. Đăng nhập bằng email và mật khẩu sau khi xác minh thành công.
@@ -97,6 +101,7 @@ Seed tạo tài khoản mẫu: `sender@gmail.com`, `driver-a@gmail.com`, `driver
 Nếu Gmail SMTP chưa cấu hình đúng, backend sẽ từ chối đăng ký và xóa tài khoản chưa xác minh để tránh tạo bản ghi không thể sử dụng. Kiểm tra log API và xác nhận `SMTP_USER`, Google App Password, `EMAIL_FROM` và kết nối mạng.
 
 ### Tạo đơn giao nhận
+
 1. Vào **Tạo đơn giao hàng**.
 2. Nhập địa chỉ lấy/giao đầy đủ.
 3. Ghim chính xác cả điểm lấy và điểm giao trên bản đồ.
@@ -107,12 +112,14 @@ Nếu Gmail SMTP chưa cấu hình đúng, backend sẽ từ chối đăng ký v
 Quãng đường tính phí được lấy từ OSRM dựa trên hai tọa độ đã ghim. Hãy kiểm tra vị trí ghim trùng với địa chỉ trước khi tính phí hoặc tạo đơn.
 
 ### Quản lý và điều phối
+
 1. Đăng nhập bằng tài khoản `ADMIN` hoặc `DISPATCHER` được cấp.
 2. Vào **Tổng quan** để xem đơn và hàng chờ.
 3. Mở **Tất cả đơn hàng**, kiểm tra chi tiết hoặc mở **Điều phối tài xế** để gọi phân công.
 4. Tài khoản `ADMIN` có thể mở **Tài khoản & phân quyền** để khóa/mở tài khoản và **Bảng giá dịch vụ** để tạo phiên bản bảng giá mới.
 
 ### Tài xế
+
 1. Đăng nhập tài khoản `DRIVER` đã được cấp và xác minh.
 2. Mở **Công việc của tôi**.
 3. Nhận/từ chối đơn; xem lộ trình và điều hướng trực tiếp trên bản đồ tích hợp trong ứng dụng.

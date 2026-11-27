@@ -1,5 +1,7 @@
 # M2 đồng bộ với M3 — 12/10/2026
 
+> **Biên bản lịch sử:** Nội dung và số lượng migration/test dưới đây thuộc snapshot tháng 10/2026, trước các migration email OTP và GPS metadata. Không dùng làm hướng dẫn database hiện hành; xem [README](../../README.md), [SRS](../SRS.md) và [prisma/migrations](../../prisma/migrations).
+
 ## Kết quả review
 
 Đã tiếp nhận nhánh `feature/m3-integration` tại commit `a661cd5` vào nhánh M2 bằng fast-forward, giữ nguyên tác giả và lịch sử commit M3.
